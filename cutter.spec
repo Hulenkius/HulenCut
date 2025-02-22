@@ -54,7 +54,7 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.zipfiles,
-    a.datas,
+    [d for d in a.datas if os.path.isfile(d[0])],  # 僅保留有效檔案
     strip=False,
     upx=True,
     upx_exclude=[],
