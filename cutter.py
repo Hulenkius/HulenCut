@@ -3,11 +3,13 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
                              QGraphicsRectItem, QFileDialog, QAction, QMessageBox, QMenu,
                              QListWidget, QWidget, QLabel, QLineEdit, QPushButton, QHBoxLayout,
                              QVBoxLayout, QDockWidget, QInputDialog, QToolButton, QAbstractItemView,
-                             QDialog, QFormLayout, QSpinBox, QDoubleSpinBox, QRadioButton, QDialogButtonBox, QButtonGroup)
+                             QDialog, QFormLayout, QSpinBox, QDoubleSpinBox, QRadioButton, QDialogButtonBox, QButtonGroup, QGraphicsItem, QGraphicsEllipseItem, QComboBox)
 from PyQt5.QtGui import QPixmap, QPainter, QPen, QKeyEvent, QImage, QIcon, QIntValidator
 from PyQt5.QtCore import Qt, QRectF, QPointF
 import os
 import json
+import cv2
+import numpy as np
 
 def resource_path(relative_path):
     # 取得資源文件的絕對路徑，可在 PyInstaller 打包後正確載入
@@ -16,15 +18,121 @@ def resource_path(relative_path):
 
 # 自訂切片項
 class SliceRect(QGraphicsRectItem):
+    lastSelected = None
+    # 內部 ResizeHandle 類別
+    class ResizeHandle(QGraphicsEllipseItem):
+        def __init__(self, posKey, parentSlice):
+            super().__init__(parentSlice)
+            self.posKey = posKey
+            self.parentSlice = parentSlice
+            # 根據手柄位置設定合適的游標
+            cursors = {
+                "top_left": Qt.SizeFDiagCursor,
+                "top": Qt.SizeVerCursor,
+                "top_right": Qt.SizeBDiagCursor,
+                "right": Qt.SizeHorCursor,
+                "bottom_right": Qt.SizeFDiagCursor,
+                "bottom": Qt.SizeVerCursor,
+                "bottom_left": Qt.SizeBDiagCursor,
+                "left": Qt.SizeHorCursor
+            }
+            self.setCursor(cursors.get(posKey, Qt.ArrowCursor))
+            self.setAcceptedMouseButtons(Qt.LeftButton)
+            self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
+
+        def mousePressEvent(self, event):
+            self.startPos = event.scenePos()
+            self.startRect = self.parentSlice.rect()
+            event.accept()
+
+        def mouseMoveEvent(self, event):
+            delta = event.scenePos() - self.startPos
+            r = QRectF(self.startRect)
+            if self.posKey == "top_left":
+                r.setTopLeft(r.topLeft() + delta)
+            elif self.posKey == "top":
+                r.setTop(r.top() + delta.y())
+            elif self.posKey == "top_right":
+                r.setTopRight(r.topRight() + delta)
+            elif self.posKey == "right":
+                r.setRight(r.right() + delta.x())
+            elif self.posKey == "bottom_right":
+                r.setBottomRight(r.bottomRight() + delta)
+            elif self.posKey == "bottom":
+                r.setBottom(r.bottom() + delta.y())
+            elif self.posKey == "bottom_left":
+                r.setBottomLeft(r.bottomLeft() + delta)
+            elif self.posKey == "left":
+                r.setLeft(r.left() + delta.x())
+            # 防止尺寸過小
+            if r.width() < 5 or r.height() < 5:
+                r = self.parentSlice.rect()
+            self.parentSlice.setRect(r)
+            self.parentSlice.updateHandles()
+            event.accept()
+
+        def mouseReleaseEvent(self, event):
+            event.accept()
+            # 更新切片列表，保證切片邊緣調整後數據即時更新
+            scene = self.parentSlice.scene()
+            if scene and scene.views():
+                main = scene.views()[0].parent()
+                if hasattr(main, "updateSliceList"):
+                    main.updateSliceList()
+
     def __init__(self, rect, number, *args, **kwargs):
         super().__init__(rect, *args, **kwargs)
         self.number = number
         self.setFlag(QGraphicsRectItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsRectItem.ItemIsMovable, True)
-    
+        self.createHandles()
+
+    def createHandles(self):
+        handlePositions = ["top_left", "top", "top_right", "right",
+                           "bottom_right", "bottom", "bottom_left", "left"]
+        self.handles = {}
+        for pos in handlePositions:
+            handle = SliceRect.ResizeHandle(pos, self)
+            handle.setRect(0, 0, 8, 8)  # 手柄大小 8x8
+            handle.hide()
+            self.handles[pos] = handle
+        self.updateHandles()
+
+    def updateHandles(self):
+        r = self.rect()
+        cx, cy = r.center().x(), r.center().y()
+        positions = {
+            "top_left": QPointF(r.left(), r.top()),
+            "top": QPointF(cx, r.top()),
+            "top_right": QPointF(r.right(), r.top()),
+            "right": QPointF(r.right(), cy),
+            "bottom_right": QPointF(r.right(), r.bottom()),
+            "bottom": QPointF(cx, r.bottom()),
+            "bottom_left": QPointF(r.left(), r.bottom()),
+            "left": QPointF(r.left(), cy)
+        }
+        for key, handle in self.handles.items():
+            handle.setPos(positions[key] - QPointF(4, 4))  # 平移使手柄置中
+
+    def setSelected(self, selected):
+        super().setSelected(selected)
+        fixedMode = getattr(self.scene().views()[0].parent(), "fixedSliceSize", None) if self.scene() and self.scene().views() else None
+        if selected:
+            if SliceRect.lastSelected and SliceRect.lastSelected != self:
+                for handle in SliceRect.lastSelected.handles.values():
+                    handle.hide()
+            SliceRect.lastSelected = self
+            for handle in self.handles.values():
+                handle.setVisible(fixedMode is None)
+            self.updateHandles()
+        else:
+            for handle in self.handles.values():
+                handle.hide()
+            if SliceRect.lastSelected == self:
+                SliceRect.lastSelected = None
+
     def mousePressEvent(self, event):
         self.setSelected(True)
-        # 記錄初始位置與滑鼠壓下的場景位置
         self._mousePressScenePos = event.scenePos()
         self._initialPos = self.pos()
         if self.scene() and self.scene().views():
@@ -35,10 +143,8 @@ class SliceRect(QGraphicsRectItem):
     
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
-        # 計算滑鼠拖移距離，低於5px則視爲選擇動作
         delta = event.scenePos() - self._mousePressScenePos
         if delta.manhattanLength() < 5:
-            # 滑鼠拖移不足，恢復原位置
             self.setPos(self._initialPos)
             if self.scene() and self.scene().views():
                 parent = self.scene().views()[0].parent()
@@ -79,6 +185,18 @@ class SliceRect(QGraphicsRectItem):
                 view = scene.views()[0]
                 if hasattr(view.parent(), "updateSliceList"):
                     view.parent().updateSliceList()
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemSelectedChange and self.scene():
+            main = self.scene().views()[0].parent()
+            if value and main.fixedSliceSize is None:
+                if len([item for item in self.scene().selectedItems() if isinstance(item, SliceRect)]) == 1:
+                    pass
+                else:
+                    pass
+            else:
+                pass
+        return super().itemChange(change, value)
 
 # 自訂「固定寬高」窗口
 class SliceDimensionWidget(QWidget):
@@ -155,6 +273,40 @@ class DivideSlicesDialog(QDialog):
     def getValues(self):
         method = "corner" if self.radioCorner.isChecked() else "center"
         return self.spinCols.value(), self.spinRows.value(), method
+
+# 規整化切片對話框
+class NormalizeSlicesDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("規整化切片")
+        layout = QFormLayout(self)
+        # 目標範圍選項
+        self.radioAll = QRadioButton("全部", self)
+        self.radioSelected = QRadioButton("已選擇", self)
+        self.radioAll.setChecked(True)
+        radioLayout = QHBoxLayout()
+        radioLayout.addWidget(self.radioAll)
+        radioLayout.addWidget(self.radioSelected)
+        layout.addRow("切片範圍：", radioLayout)
+        # 輸入指定寬高
+        self.spinWidth = QSpinBox(self)
+        self.spinWidth.setRange(1, 10000)
+        self.spinWidth.setValue(100)
+        self.spinWidth.setSuffix(" px")
+        self.spinHeight = QSpinBox(self)
+        self.spinHeight.setRange(1, 10000)
+        self.spinHeight.setValue(100)
+        self.spinHeight.setSuffix(" px")
+        layout.addRow("指定寬度：", self.spinWidth)
+        layout.addRow("指定高度：", self.spinHeight)
+        self.buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        layout.addRow(self.buttonBox)
+    
+    def getValues(self):
+        target = "all" if self.radioAll.isChecked() else "selected"
+        return target, self.spinWidth.value(), self.spinHeight.value()
 
 # 自訂繪圖視圖
 class SliceView(QGraphicsView):
@@ -391,7 +543,7 @@ class SliceView(QGraphicsView):
         else:
             super().wheelEvent(event)
 
-# 修改 SliceListWidget 類：啓用內部拖放並重載 dropEvent
+# 啓用內部拖放並重載 dropEvent
 class SliceListWidget(QListWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -435,7 +587,7 @@ class SliceListWidget(QListWidget):
         if hasattr(main_win, "markProjectEdited"):
             main_win.markProjectEdited()
 
-# 修改 移動切片對話框：將「全部」與「已選擇」橫向佈局
+# 將「全部」與「已選擇」橫向佈局
 class MoveSlicesDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -468,7 +620,7 @@ class MoveSlicesDialog(QDialog):
         target = "all" if self.radioAll.isChecked() else "selected"
         return target, self.spinX.value(), self.spinY.value()
 
-# 修改 縮放切片對話框：將「全部」與「已選擇」橫向佈局
+# 將「全部」與「已選擇」橫向佈局
 class ScaleSlicesDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -549,7 +701,7 @@ class FilterSlicesDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("囫圇切 HulenCut v0.5")
+        self.setWindowTitle("囫圇切 HulenCut v0.5.3")
         self.setWindowIcon(QIcon(resource_path("hulencutter.ico")))
         self.resize(800, 600)
         self.fixedSliceSize = None
@@ -568,7 +720,7 @@ class MainWindow(QMainWindow):
         # 在頂部添加操作按鈕
         sliceListContainer = QWidget(self)
         vLayout = QVBoxLayout(sliceListContainer)
-        # 新增水平佈局，放置「置頂」「上移」「下移」「置底」按鈕
+        # 水平佈局，放置「置頂」「上移」「下移」「置底」按鈕
         btnLayout = QHBoxLayout()
         self.btnTop = QPushButton("置頂", self)
         self.btnTop.clicked.connect(self.topSlice)
@@ -603,7 +755,7 @@ class MainWindow(QMainWindow):
         self.currentImagePath = None  # 儲存當前圖片完整路徑
         # 連結 scene 的 selectionChanged 信號
         self.sliceView.scene().selectionChanged.connect(self.syncListSelectionWithScene)
-        self.projectEdited = False  # 新增工程狀態標誌
+        self.projectEdited = False  # 工程狀態標誌
         self.dividingSlices = False      # 劃分切片模式旗標
         self.dividePoints = []           # 儲存使用者點選的兩個點
         self.divide_params = None        # 儲存劃分參數 (cols, rows, method)
@@ -792,6 +944,12 @@ class MainWindow(QMainWindow):
         
         # 動作下拉選單
         actionMenu = QMenu("動作", self)
+        actAutoRecognize = QAction("自動識別單字切片", self)
+        actAutoRecognize.triggered.connect(self.autoRecognizeWordSlices)
+        actionMenu.addAction(actAutoRecognize)
+        actDivide = QAction("劃分切片", self)
+        actDivide.triggered.connect(self.openDivideSlicesDialog)
+        actionMenu.addAction(actDivide)
         actMove = QAction("移動切片", self)
         actMove.triggered.connect(self.openMoveSlicesDialog)
         actionMenu.addAction(actMove)
@@ -801,9 +959,12 @@ class MainWindow(QMainWindow):
         actFilter = QAction("篩選切片", self)
         actFilter.triggered.connect(self.filterSlices)
         actionMenu.addAction(actFilter)
-        actDivide = QAction("劃分切片", self)
-        actDivide.triggered.connect(self.openDivideSlicesDialog)
-        actionMenu.addAction(actDivide)
+        actNormalize = QAction("規整化切片", self)
+        actNormalize.triggered.connect(self.openNormalizeSlicesDialog)
+        actionMenu.addAction(actNormalize)
+        actMerge = QAction("合併重疊切片", self)
+        actMerge.triggered.connect(self.mergeOverlappingSlices)
+        actionMenu.addAction(actMerge)
         actionButton = QToolButton(self)
         actionButton.setText("動作")
         actionButton.setMenu(actionMenu)
@@ -1042,7 +1203,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"導出完成, 輸出目錄：{export_dir}")
 
     def showAbout(self):
-        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5\n\n左鍵拖拽創建切片，雙擊選擇切片，或在列表中選擇。\n按住 Ctrl 以在視圖中進行 單擊/拖拽 以多選。\n右鍵切片以刪除，或在列表中 右鍵/Delete 鍵刪除。\n雙擊後按住左鍵拖拽移動切片，也可用方向鍵移動。\n當指定了切片固定長寬時不支持雙擊操作。\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絕讚狗啃中")
+        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.3\n\n左鍵拖拽創建切片，雙擊選擇切片，或在列表中選擇。\n對着手柄雙擊後按住左鍵拖拽以調整切片邊緣。\n按住 Ctrl 在視圖中進行 單擊/拖拽 以多選。\n雙擊後按住左鍵拖拽移動切片，也可用方向鍵移動。\n右鍵切片以刪除，或在列表中 右鍵/Delete 鍵刪除。\n當指定了切片固定長寬時不支持雙擊操作。\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絕讚狗啃中")
 
     def openProject(self):
         path, _ = QFileDialog.getOpenFileName(self, "導入工程", "", "工程文件 (*.cutter)")
@@ -1254,7 +1415,7 @@ class MainWindow(QMainWindow):
         p1, p2 = self.dividePoints[0], self.dividePoints[1]
         scene = self.sliceView.scene()
         items = []
-        if method == "corner":
+        if (method == "corner"):
             x1, y1 = min(p1.x(), p2.x()), min(p1.y(), p2.y())
             x2, y2 = max(p1.x(), p2.x()), max(p1.y(), p2.y())
             total_width = x2 - x1
@@ -1268,7 +1429,7 @@ class MainWindow(QMainWindow):
                     new_slice = SliceRect(rect, slice_number)
                     scene.addItem(new_slice)
                     items.append(new_slice)
-        else:  # center method
+        else:  # 置中方法
             x1, y1 = min(p1.x(), p2.x()), min(p1.y(), p2.y())
             x2, y2 = max(p1.x(), p2.x()), max(p1.y(), p2.y())
             total_width = x2 - x1
@@ -1298,6 +1459,110 @@ class MainWindow(QMainWindow):
 
     def clearProjectEdited(self):
         self.projectEdited = False
+
+    # 规整化切片動作，依據切片中心點更新指定寬高
+    def openNormalizeSlicesDialog(self):
+        dialog = NormalizeSlicesDialog(self)
+        if dialog.exec_():
+            target, new_width, new_height = dialog.getValues()
+            # 根據目標取得切片列表
+            if target == "all":
+                slices = [item for item in self.sliceView.scene().items() if isinstance(item, SliceRect)]
+            else:
+                slices = self.sliceView.scene().selectedItems()
+            count = 0
+            for s in slices:
+                center = s.rect().center()
+                new_rect = QRectF(center.x() - new_width/2, center.y() - new_height/2, new_width, new_height)
+                s.setRect(new_rect)
+            self.updateSliceList()
+            if hasattr(self, "statusBar"):
+                self.statusBar().showMessage(f"切片規整化完成")
+            if hasattr(self, "markProjectEdited"):
+                self.markProjectEdited()
+
+    # 辨識定位相關功能
+    def autoRecognizeWordSlices(self):
+        if not self.sliceView.image_item:
+            return
+        # 選擇圖片風格對話框
+        style, ok = QInputDialog.getItem(self, "選擇圖片風格", "請選擇圖片風格：", ["白底黑字", "黑底白字"], 0, False)
+        if not ok:
+            return
+        qimg = self.sliceView.image_item.pixmap().toImage()
+        width, height = qimg.width(), qimg.height()
+        ptr = qimg.bits()
+        ptr.setsize(qimg.byteCount())
+        img_array = np.array(ptr).reshape(height, width, 4)
+        gray = cv2.cvtColor(img_array, cv2.COLOR_BGRA2GRAY)
+        # 根據用戶選擇的圖片風格應用不同二值化方式
+        if style == "白底黑字":
+            _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
+        else:
+            _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+        # 輪廓檢測
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        rects = []
+        for cnt in contours:
+            x, y, w, h = cv2.boundingRect(cnt)
+            rects.append(QRectF(x, y, w, h))
+        for rect in rects:
+            new_slice = SliceRect(rect, number=0)  # 編號後續於 updateSliceList 中更新
+            self.sliceView.scene().addItem(new_slice)
+        self.updateSliceList()
+        self.statusBar().showMessage(f"自動識別完成，新增 {len(rects)} 切片")
+        self.markProjectEdited()
+
+    def mergeOverlappingSlices(self):
+        from PyQt5.QtWidgets import QInputDialog, QMessageBox  # 如未引入則補上
+        # 詢問用戶處理範圍
+        scope, ok = QInputDialog.getItem(self, "合併重疊切片", "選擇切片範圍：", ["全部", "已選擇"], 0, False)
+        if not ok:
+            return
+        if scope == "已選擇":
+            slices = [item for item in self.sliceView.scene().selectedItems() if isinstance(item, SliceRect)]
+        else:
+            slices = [item for item in self.sliceView.scene().items() if isinstance(item, SliceRect)]
+        if not slices:
+            QMessageBox.information(self, "合併重疊切片", "沒有可處理的切片")
+            return
+        n = len(slices)
+        # 預先取得各切片的矩形
+        rects = [s.rect() for s in slices]
+        visited = [False] * n
+        groups = []
+        def overlaps(r1, r2):
+            return r1.intersects(r2)
+        for i in range(n):
+            if visited[i]:
+                continue
+            group = [i]
+            stack = [i]
+            visited[i] = True
+            while stack:
+                cur = stack.pop()
+                for j in range(n):
+                    if not visited[j] and overlaps(rects[cur], rects[j]):
+                        # 簡單檢查：若與組內任一切片相交則加入同一組
+                        if any(overlaps(rects[k], rects[j]) for k in group):
+                            visited[j] = True
+                            stack.append(j)
+                            group.append(j)
+            if len(group) > 1:
+                groups.append(group)
+        # 對每一組合併，並替換原有切片
+        for group in groups:
+            union_rect = rects[group[0]]
+            for idx in group[1:]:
+                union_rect = union_rect.united(rects[idx])
+            # 刪除原切片（由後往前刪除避免索引問題）
+            for idx in sorted(group, reverse=True):
+                self.sliceView.scene().removeItem(slices[idx])
+            new_slice = SliceRect(union_rect, number=0)
+            self.sliceView.scene().addItem(new_slice)
+        self.updateSliceList()
+        self.statusBar().showMessage("合併重疊切片完成")
+        self.markProjectEdited()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
