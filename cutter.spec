@@ -12,12 +12,14 @@ def tree(src, prefix):
                 res.append((full_path, dest_path))
     return res
 
+# 定義並過濾資料資源
+data_files = [d for d in tree('dist/HulenCut', 'HulenCut') if os.path.isfile(d[0])]
+
 a = Analysis(
     ['cutter.py'],
     pathex=[],
     binaries=[],
-    # 更新 datas 參數，使用修正後的 tree 函數
-    datas=tree('dist/HulenCut', 'HulenCut'),
+    datas=data_files,  # 使用已過濾的資料資源
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -54,7 +56,7 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.zipfiles,
-    [d for d in a.datas if os.path.isfile(d[0])],  # 僅保留有效檔案
+    data_files,  # 統一使用 data_files
     strip=False,
     upx=True,
     upx_exclude=[],
