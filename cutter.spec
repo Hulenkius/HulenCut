@@ -1,10 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import Tree
+
 a = Analysis(
     ['cutter.py'],
     pathex=[],
     binaries=[],
-    datas=[('hulencutter.ico', '.')],
+    datas=Tree('dist/HulenCut', prefix='HulenCut'),  # 修改此行以包含整個目錄
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
