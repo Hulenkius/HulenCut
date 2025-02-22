@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QGraphicsView, QGraphics
                              QGraphicsRectItem, QFileDialog, QAction, QMessageBox, QMenu,
                              QListWidget, QWidget, QLabel, QLineEdit, QPushButton, QHBoxLayout,
                              QVBoxLayout, QDockWidget, QInputDialog, QToolButton, QAbstractItemView,
-                             QDialog, QFormLayout, QSpinBox, QDoubleSpinBox, QRadioButton, QDialogButtonBox, QButtonGroup, QGraphicsItem, QGraphicsEllipseItem, QComboBox)
+                             QDialog, QFormLayout, QSpinBox, QDoubleSpinBox, QRadioButton, QDialogButtonBox, QButtonGroup, QGraphicsItem, QGraphicsEllipseItem, QComboBox, QAbstractSpinBox)
 from PyQt5.QtGui import QPixmap, QPainter, QPen, QKeyEvent, QImage, QIcon, QIntValidator
 from PyQt5.QtCore import Qt, QRectF, QPointF
 import os
@@ -12,7 +12,7 @@ from cv2 import cvtColor, threshold, findContours, boundingRect, THRESH_BINARY_I
 from numpy import array
 
 def resource_path(relative_path):
-    # 取得資源文件的絕對路徑，可在 PyInstaller 打包後正確載入
+    # 取得資源文件的絶對路徑，可在 PyInstaller 打包後正確載入
     base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
     return os.path.join(base_path, relative_path)
 
@@ -744,24 +744,72 @@ class FilterSlicesDialog(QDialog):
         dimOperator = "or" if self.radioOr.isChecked() else "and"
         return target, condition, dimOperator, self.spinThreshold.value()
 
+# 檢查更新對話框
+class CheckUpdateDialog(QDialog):
+    def __init__(self, current_version, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("檢查更新")
+        from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QPushButton
+        from PyQt5.QtGui import QDesktopServices
+        from PyQt5.QtCore import QUrl
+        layout = QVBoxLayout(self)
+        try:
+            import urllib.request
+            response = urllib.request.urlopen("https://vistudium.top/gouken/UPDATE")
+            update_text = response.read().decode("utf-8")
+        except Exception as e:
+            update_text = "無法取得更新資訊：" + str(e)
+        lines = update_text.splitlines()
+        latest_version = lines[0] if lines else ""
+        if current_version.strip() != latest_version.strip():
+            # 若有新版本，顯示更新內容與滾動框
+            message = f"🔔 有版本更新：{latest_version}\n訪問 https://vistudium.top/gouken/ 以更新"
+            msgLabel = QLabel(message, self)
+            msgLabel.setOpenExternalLinks(True)
+            layout.addWidget(msgLabel)
+            textEdit = QTextEdit(self)
+            textEdit.setReadOnly(True)
+            textEdit.setPlainText(update_text)
+            textEdit.setFixedWidth(500)
+            layout.addWidget(textEdit)
+            btnLayout = QHBoxLayout()
+            visitBtn = QPushButton("訪問網頁", self)
+            visitBtn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://vistudium.top/gouken/")))
+            btnLayout.addWidget(visitBtn)
+            okBtn = QPushButton("確定", self)
+            okBtn.clicked.connect(self.accept)
+            btnLayout.addWidget(okBtn)
+            layout.addLayout(btnLayout)
+            QApplication.beep()
+        else:
+            # 已是最新版，只顯示訊息與確定按鈕
+            msgLabel = QLabel("🎉 目前已是最新版！", self)
+            layout.addWidget(msgLabel)
+            btnLayout = QHBoxLayout()
+            okBtn = QPushButton("確定", self)
+            okBtn.clicked.connect(self.accept)
+            btnLayout.addWidget(okBtn)
+            layout.addLayout(btnLayout)
+            QApplication.beep()
+
 # 主視窗
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("囫圇切 HulenCut v0.5.5")
+        self.setWindowTitle("囫圇切 HulenCut v0.5.7")
+        self.currentVersion = "v0.5.7"  # 當前版本號
         self.setWindowIcon(QIcon(resource_path("hulencutter.ico")))
         self.resize(800, 600)
         self.fixedSliceSize = None
         self.sliceView = SliceView(self)
         self.setCentralWidget(self.sliceView)
-        self.createToolBar()
         self.statusBar().showMessage("準備就緒")
         # 預設導出目錄與格式
         self.defaultExportDir = ""
         self.defaultExportFormat = "PNG"
         # 支援導入文件夾以及圖片導航
         self.currentFolder = ""
-        self.folderImages = []
+        self.folderImages = []  # 初始化 folderImages 屬性
         self.currentImageIndex = -1
         self.sliceList = SliceListWidget(self)
         # 在頂部添加操作按鈕
@@ -806,6 +854,7 @@ class MainWindow(QMainWindow):
         self.dividingSlices = False      # 劃分切片模式旗標
         self.dividePoints = []           # 儲存使用者點選的兩個點
         self.divide_params = None        # 儲存劃分參數 (cols, rows, method)
+        self.createToolBar()  # 確保所有屬性初始化後再調用
 
     # 根據 sliceList 的順序更新切片的 number 並刷新列表
     def reorderSlices(self):
@@ -1050,12 +1099,32 @@ class MainWindow(QMainWindow):
         actionButton.setPopupMode(QToolButton.InstantPopup)
         toolbar.addWidget(actionButton)
 
-        # 獨立按鈕：上一張、下一張、關於
         prevAct = QAction("上一張", self)
         prevAct.triggered.connect(self.prevImage)
         prevAct.setShortcut("Ctrl+Left")
         prevAct.setToolTip("Ctrl+Left")
         toolbar.addAction(prevAct)
+        
+        # 新增：圖片跳轉 widget（顯示「當前/總數」）
+        self.imageJumpSpin = QSpinBox(self)
+        self.imageJumpSpin.setButtonSymbols(QAbstractSpinBox.NoButtons)  # 移除小箭頭按鈕
+        self.imageJumpSpin.setMinimum(1)
+        self.imageJumpSpin.setMaximum(len(self.folderImages) if self.folderImages else 1)
+        self.imageJumpSpin.setValue(self.currentImageIndex + 1 if self.folderImages else 1)
+        self.imageJumpSpin.setFixedWidth(40)
+        self.imageJumpSpin.setToolTip("跳轉圖片")
+        self.imageJumpSpin.editingFinished.connect(self.jumpToImage)
+        
+        self.imageTotalLabel = QLabel("", self)
+        self.imageTotalLabel.setText(f"/{len(self.folderImages)}" if self.folderImages else "/1")
+        
+        jumpWidget = QWidget(self)
+        jumpLayout = QHBoxLayout(jumpWidget)
+        jumpLayout.setContentsMargins(0, 0, 0, 0)
+        jumpLayout.addWidget(self.imageJumpSpin)
+        jumpLayout.addWidget(self.imageTotalLabel)
+        toolbar.addWidget(jumpWidget)
+        
         nextAct = QAction("下一張", self)
         nextAct.triggered.connect(self.nextImage)
         nextAct.setShortcut("Ctrl+Right")
@@ -1064,6 +1133,9 @@ class MainWindow(QMainWindow):
         aboutAct = QAction("關於", self)
         aboutAct.triggered.connect(self.showAbout)
         toolbar.addAction(aboutAct)
+        checkUpdateAct = QAction("檢査更新", self)
+        checkUpdateAct.triggered.connect(self.checkUpdate)
+        toolbar.addAction(checkUpdateAct)
 
     def updateExportDefaults(self):
         # 讓用戶指定預設導出目錄
@@ -1103,6 +1175,12 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"載入圖片：{filename}")
         self.originalBaseName = os.path.splitext(filename)[0]
         self.currentImagePath = path  # 儲存圖片路徑
+        # 更新跳轉 widget 資訊
+        if self.folderImages:
+            count = len(self.folderImages)
+            self.imageJumpSpin.setMaximum(count)
+            self.imageJumpSpin.setValue(self.currentImageIndex + 1)
+            self.imageTotalLabel.setText(f"/{count}")
         self.checkAndLoadProject()     # 自動檢查工程文件
 
     # 圖片導航前確認是否捨棄現有切片
@@ -1282,7 +1360,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"導出完成, 輸出目錄：{export_dir}")
 
     def showAbout(self):
-        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.5\n\n左鍵拖拽創建切片，雙擊選擇切片，或在列表中選擇。\n對着手柄雙擊後按住左鍵拖拽以調整切片邊緣。\n按住 Ctrl 在視圖中進行 單擊/拖拽 以多選。\n雙擊後按住左鍵拖拽移動切片，也可用方向鍵移動。\n右鍵切片以刪除，或在列表中 右鍵/Delete 鍵刪除。\n當指定了切片固定長寬時不支持雙擊操作。\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絕讚狗啃中")
+        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.7\n\n左鍵拖拽創建切片，雙擊選擇切片，或在列表中選擇。\n對着手柄雙擊後按住左鍵拖拽以調整切片邊緣。\n按住 Ctrl 在視圖中進行 單擊/拖拽 以多選。\n雙擊後按住左鍵拖拽移動切片，也可用方向鍵移動。\n右鍵切片以刪除，或在列表中 右鍵/Delete 鍵刪除。\n當指定了切片固定長寬時不支持雙擊操作。\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絶讚狗啃中")
 
     def openProject(self):
         path, _ = QFileDialog.getOpenFileName(self, "導入工程", "", "工程文件 (*.cutter)")
@@ -1308,6 +1386,7 @@ class MainWindow(QMainWindow):
             if isinstance(item, SliceRect):
                 scene.removeItem(item)
         self.updateSliceList()
+        QApplication.beep()
         if hasattr(self, "statusBar"):
             self.statusBar().showMessage("所有切片已清空")
         if hasattr(self, "markProjectEdited"):
@@ -1329,6 +1408,7 @@ class MainWindow(QMainWindow):
             for s in slices:
                 s.setRect(s.rect().translated(dx, dy))
             self.updateSliceList()
+            QApplication.beep()
             self.statusBar().showMessage("切片移動完成")
             self.markProjectEdited()
 
@@ -1354,6 +1434,7 @@ class MainWindow(QMainWindow):
                 new_rect = QRectF(cx - new_w/2, cy - new_h/2, new_w, new_h)
                 s.setRect(new_rect)
             self.updateSliceList()
+            QApplication.beep()
             self.statusBar().showMessage("切片縮放完成")
             self.markProjectEdited()
 
@@ -1534,9 +1615,15 @@ class MainWindow(QMainWindow):
         for s in items:
             s.setSelected(True)
         self.updateSliceList()
+        QApplication.beep()
         self.statusBar().showMessage("劃分切片完成")
         if hasattr(self, "markProjectEdited"):
             self.markProjectEdited()
+
+    # 檢查更新功能
+    def checkUpdate(self):
+        dlg = CheckUpdateDialog(self.currentVersion, self)
+        dlg.exec_()
 
     # 新增標記方法
     def markProjectEdited(self):
@@ -1561,6 +1648,7 @@ class MainWindow(QMainWindow):
                 new_rect = QRectF(center.x() - new_width/2, center.y() - new_height/2, new_width, new_height)
                 s.setRect(new_rect)
             self.updateSliceList()
+            QApplication.beep()
             if hasattr(self, "statusBar"):
                 self.statusBar().showMessage(f"切片規整化完成")
             if hasattr(self, "markProjectEdited"):
@@ -1595,6 +1683,7 @@ class MainWindow(QMainWindow):
             new_slice = SliceRect(rect, number=0)  # 編號後續於 updateSliceList 中更新
             self.sliceView.scene().addItem(new_slice)
         self.updateSliceList()
+        QApplication.beep()
         self.statusBar().showMessage(f"自動識別完成，新增 {len(rects)} 切片")
         self.markProjectEdited()
 
@@ -1646,8 +1735,17 @@ class MainWindow(QMainWindow):
             new_slice = SliceRect(union_rect, number=0)
             self.sliceView.scene().addItem(new_slice)
         self.updateSliceList()
+        QApplication.beep()
         self.statusBar().showMessage("合併重疊切片完成")
         self.markProjectEdited()
+
+    def jumpToImage(self):
+        # 根據用戶輸入跳轉圖片（索引從 1 開始）
+        target = self.imageJumpSpin.value() - 1
+        if self.folderImages and 0 <= target < len(self.folderImages):
+            if target != self.currentImageIndex:
+                self.currentImageIndex = target
+                self.loadCurrentFolderImage()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
