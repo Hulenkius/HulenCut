@@ -1390,7 +1390,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"導出完成, 輸出目錄：{export_dir}")
 
     def showAbout(self):
-        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.8\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絶讚狗啃中")
+        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.8\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絶讚狗啃中")
         
     def showManual(self):
         manual_text = (
@@ -1400,7 +1400,7 @@ class MainWindow(QMainWindow):
             "雙擊後按住左鍵拖拽移動切片，也可用方向鍵移動。\n"
             "右鍵切片以刪除，或在列表中 右鍵/Delete 鍵刪除。\n"
             "當指定了切片固定長寬時不支持雙擊操作。\n"
-            "\n查看教程影片以獲得更多幫助。"
+            "\n觀看教程影片以獲得更多幫助。"
         )
         dialog = QDialog(self)
         dialog.setWindowTitle("操作指南")
