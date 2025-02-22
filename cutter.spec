@@ -1,12 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 
-from PyInstaller.utils.hooks import Tree
+# 自定義 tree 函數，替代原本的 Tree
+def tree(src, prefix):
+    res = []
+    for root, dirs, files in os.walk(src):
+        for file in files:
+            full_path = os.path.join(root, file)
+            dest_path = os.path.join(prefix, os.path.relpath(root, src))
+            res.append((full_path, dest_path))
+    return res
 
 a = Analysis(
     ['cutter.py'],
     pathex=[],
     binaries=[],
-    datas=Tree('dist/HulenCut', prefix='HulenCut'),  # 修改此行以包含整個目錄
+    # 更新 datas 參數，使用自定義 tree 函數
+    datas=tree('dist/HulenCut', 'HulenCut'),
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
