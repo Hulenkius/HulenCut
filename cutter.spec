@@ -1,21 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 
-# 自定義 tree 函數，替代原本的 Tree
+# 修改後的自定義 tree 函數，僅加入有效檔案，避免加入目錄
 def tree(src, prefix):
     res = []
     for root, dirs, files in os.walk(src):
         for file in files:
             full_path = os.path.join(root, file)
-            dest_path = os.path.join(prefix, os.path.relpath(root, src))
-            res.append((full_path, dest_path))
+            if os.path.isfile(full_path):  # 僅加入有效檔案
+                dest_path = os.path.join(prefix, os.path.relpath(root, src))
+                res.append((full_path, dest_path))
     return res
 
 a = Analysis(
     ['cutter.py'],
     pathex=[],
     binaries=[],
-    # 更新 datas 參數，使用自定義 tree 函數
+    # 更新 datas 參數，使用修正後的 tree 函數
     datas=tree('dist/HulenCut', 'HulenCut'),
     hiddenimports=[],
     hookspath=[],
