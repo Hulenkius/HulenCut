@@ -8,8 +8,8 @@ from PyQt5.QtGui import QPixmap, QPainter, QPen, QKeyEvent, QImage, QIcon, QIntV
 from PyQt5.QtCore import Qt, QRectF, QPointF
 import os
 import json
-import cv2
-import numpy as np
+from cv2 import cvtColor, threshold, findContours, boundingRect, THRESH_BINARY_INV, THRESH_BINARY, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE, COLOR_BGRA2GRAY
+from numpy import array
 
 def resource_path(relative_path):
     # 取得資源文件的絕對路徑，可在 PyInstaller 打包後正確載入
@@ -276,6 +276,8 @@ class DivideSlicesDialog(QDialog):
 
 # 規整化切片對話框
 class NormalizeSlicesDialog(QDialog):
+    last_params = {"range": "all", "width": 100, "height": 100}
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("規整化切片")
@@ -589,6 +591,8 @@ class SliceListWidget(QListWidget):
 
 # 將「全部」與「已選擇」橫向佈局
 class MoveSlicesDialog(QDialog):
+    last_params = {"range": "all", "moveX": 0, "moveY": 0}
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("移動切片")
@@ -596,7 +600,10 @@ class MoveSlicesDialog(QDialog):
         # 改成橫向排列
         self.radioAll = QRadioButton("全部", self)
         self.radioSelected = QRadioButton("已選擇", self)
-        self.radioAll.setChecked(True)
+        if MoveSlicesDialog.last_params["range"] == "selected":
+            self.radioSelected.setChecked(True)
+        else:
+            self.radioAll.setChecked(True)
         radioLayout = QHBoxLayout()
         radioLayout.addWidget(self.radioAll)
         radioLayout.addWidget(self.radioSelected)
@@ -605,10 +612,12 @@ class MoveSlicesDialog(QDialog):
         self.spinX.setRange(-10000, 10000)
         self.spinX.setValue(0)
         self.spinX.setSuffix(" px")
+        self.spinX.setValue(MoveSlicesDialog.last_params["moveX"])
         self.spinY = QSpinBox(self)
         self.spinY.setRange(-10000, 10000)
         self.spinY.setValue(0)
         self.spinY.setSuffix(" px")
+        self.spinY.setValue(MoveSlicesDialog.last_params["moveY"])
         layout.addRow("向右移動：", self.spinX)
         layout.addRow("向下移動：", self.spinY)
         self.buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
@@ -618,10 +627,17 @@ class MoveSlicesDialog(QDialog):
 
     def getValues(self):
         target = "all" if self.radioAll.isChecked() else "selected"
-        return target, self.spinX.value(), self.spinY.value()
+        moveX = self.spinX.value()
+        moveY = self.spinY.value()
+        MoveSlicesDialog.last_params = {
+            "range": target, "moveX": moveX, "moveY": moveY
+        }
+        return (target, moveX, moveY)
 
 # 將「全部」與「已選擇」橫向佈局
 class ScaleSlicesDialog(QDialog):
+    last_params = {"range": "all", "scaleX": 100.00, "scaleY": 100.00}
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("縮放切片")
@@ -629,7 +645,10 @@ class ScaleSlicesDialog(QDialog):
         # 改成橫向排列
         self.radioAll = QRadioButton("全部", self)
         self.radioSelected = QRadioButton("已選擇", self)
-        self.radioAll.setChecked(True)
+        if ScaleSlicesDialog.last_params["range"] == "selected":
+            self.radioSelected.setChecked(True)
+        else:
+            self.radioAll.setChecked(True)
         radioLayout = QHBoxLayout()
         radioLayout.addWidget(self.radioAll)
         radioLayout.addWidget(self.radioSelected)
@@ -639,11 +658,13 @@ class ScaleSlicesDialog(QDialog):
         self.spinX.setDecimals(2)
         self.spinX.setValue(100.00)
         self.spinX.setSuffix(" %")
+        self.spinX.setValue(ScaleSlicesDialog.last_params["scaleX"])
         self.spinY = QDoubleSpinBox(self)
         self.spinY.setRange(0.01, 1000.00)
         self.spinY.setDecimals(2)
         self.spinY.setValue(100.00)
         self.spinY.setSuffix(" %")
+        self.spinY.setValue(ScaleSlicesDialog.last_params["scaleY"])
         layout.addRow("橫向比例：", self.spinX)
         layout.addRow("縱向比例：", self.spinY)
         self.buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
@@ -653,9 +674,16 @@ class ScaleSlicesDialog(QDialog):
 
     def getValues(self):
         target = "all" if self.radioAll.isChecked() else "selected"
-        return target, self.spinX.value(), self.spinY.value()
+        scaleX = self.spinX.value()
+        scaleY = self.spinY.value()
+        ScaleSlicesDialog.last_params = {
+            "range": target, "scaleX": scaleX, "scaleY": scaleY
+        }
+        return (target, scaleX, scaleY)
 
 class FilterSlicesDialog(QDialog):
+    last_params = {"range": "all", "logic": "or", "condition": "lt", "threshold": 10}
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("篩選切片")
@@ -671,6 +699,16 @@ class FilterSlicesDialog(QDialog):
         radioLayout.addWidget(self.radioAll)
         radioLayout.addWidget(self.radioSelected)
         layout.addRow("切片範圍：", radioLayout)
+        self.radioOr = QRadioButton("或", self)
+        self.radioAnd = QRadioButton("和", self)
+        self.radioOr.setChecked(True)
+        self.dimConditionGroup = QButtonGroup(self)
+        self.dimConditionGroup.addButton(self.radioOr)
+        self.dimConditionGroup.addButton(self.radioAnd)
+        dimConditionLayout = QHBoxLayout()
+        dimConditionLayout.addWidget(self.radioOr)
+        dimConditionLayout.addWidget(self.radioAnd)
+        layout.addRow("篩選邏輯：", dimConditionLayout)
         # 篩選條件單選群組
         self.radioLess = QRadioButton("小於", self)
         self.radioGreater = QRadioButton("大於", self)
@@ -691,17 +729,17 @@ class FilterSlicesDialog(QDialog):
         self.buttonBox.accepted.connect(self.accept)
         self.buttonBox.rejected.connect(self.reject)
         layout.addRow(self.buttonBox)
-
     def getValues(self):
         target = "all" if self.radioAll.isChecked() else "selected"
         condition = "lt" if self.radioLess.isChecked() else "gt"
-        return target, condition, self.spinThreshold.value()
+        dimOperator = "or" if self.radioOr.isChecked() else "and"
+        return target, condition, dimOperator, self.spinThreshold.value()
 
 # 主視窗
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("囫圇切 HulenCut v0.5.3")
+        self.setWindowTitle("囫圇切 HulenCut v0.5.4")
         self.setWindowIcon(QIcon(resource_path("hulencutter.ico")))
         self.resize(800, 600)
         self.fixedSliceSize = None
@@ -944,27 +982,34 @@ class MainWindow(QMainWindow):
         
         # 動作下拉選單
         actionMenu = QMenu("動作", self)
-        actAutoRecognize = QAction("自動識別單字切片", self)
+        actAutoRecognize = QAction("自動識別切片", self)
         actAutoRecognize.triggered.connect(self.autoRecognizeWordSlices)
         actionMenu.addAction(actAutoRecognize)
+        actAutoRecognize.setShortcut("Ctrl+R")
         actDivide = QAction("劃分切片", self)
         actDivide.triggered.connect(self.openDivideSlicesDialog)
         actionMenu.addAction(actDivide)
+        actDivide.setShortcut("Ctrl+D")
         actMove = QAction("移動切片", self)
         actMove.triggered.connect(self.openMoveSlicesDialog)
         actionMenu.addAction(actMove)
+        actMove.setShortcut("Ctrl+M")
         actScale = QAction("縮放切片", self)
         actScale.triggered.connect(self.openScaleSlicesDialog)
         actionMenu.addAction(actScale)
+        actScale.setShortcut("Ctrl+L")
         actFilter = QAction("篩選切片", self)
         actFilter.triggered.connect(self.filterSlices)
         actionMenu.addAction(actFilter)
+        actFilter.setShortcut("Ctrl+F")
         actNormalize = QAction("規整化切片", self)
         actNormalize.triggered.connect(self.openNormalizeSlicesDialog)
         actionMenu.addAction(actNormalize)
+        actNormalize.setShortcut("Ctrl+N")
         actMerge = QAction("合併重疊切片", self)
         actMerge.triggered.connect(self.mergeOverlappingSlices)
         actionMenu.addAction(actMerge)
+        actMerge.setShortcut("Ctrl+G")
         actionButton = QToolButton(self)
         actionButton.setText("動作")
         actionButton.setMenu(actionMenu)
@@ -1203,7 +1248,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"導出完成, 輸出目錄：{export_dir}")
 
     def showAbout(self):
-        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.3\n\n左鍵拖拽創建切片，雙擊選擇切片，或在列表中選擇。\n對着手柄雙擊後按住左鍵拖拽以調整切片邊緣。\n按住 Ctrl 在視圖中進行 單擊/拖拽 以多選。\n雙擊後按住左鍵拖拽移動切片，也可用方向鍵移動。\n右鍵切片以刪除，或在列表中 右鍵/Delete 鍵刪除。\n當指定了切片固定長寬時不支持雙擊操作。\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絕讚狗啃中")
+        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.4\n\n左鍵拖拽創建切片，雙擊選擇切片，或在列表中選擇。\n對着手柄雙擊後按住左鍵拖拽以調整切片邊緣。\n按住 Ctrl 在視圖中進行 單擊/拖拽 以多選。\n雙擊後按住左鍵拖拽移動切片，也可用方向鍵移動。\n右鍵切片以刪除，或在列表中 右鍵/Delete 鍵刪除。\n當指定了切片固定長寬時不支持雙擊操作。\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絕讚狗啃中")
 
     def openProject(self):
         path, _ = QFileDialog.getOpenFileName(self, "導入工程", "", "工程文件 (*.cutter)")
@@ -1378,7 +1423,7 @@ class MainWindow(QMainWindow):
     def filterSlices(self):
         dlg = FilterSlicesDialog(self)
         if dlg.exec_() == QDialog.Accepted:
-            target, condition, threshold = dlg.getValues()
+            target, condition, dimOperator, threshold = dlg.getValues()
             # 選定要處理的切片
             if target == "all":
                 slices = [s for s in self.sliceView.scene().items() if isinstance(s, SliceRect)]
@@ -1389,10 +1434,16 @@ class MainWindow(QMainWindow):
             for s in slices:
                 w = s.rect().width()
                 h = s.rect().height()
-                if condition == "lt" and w < threshold and h < threshold:
-                    self.sliceView.scene().removeItem(s)
-                elif condition == "gt" and w > threshold and h > threshold:
-                    self.sliceView.scene().removeItem(s)
+                if dimOperator == "or":
+                    if condition == "lt" and (w < threshold or h < threshold):
+                        self.sliceView.scene().removeItem(s)
+                    elif condition == "gt" and (w > threshold or h > threshold):
+                        self.sliceView.scene().removeItem(s)
+                else:  # dimOperator == "and"
+                    if condition == "lt" and (w < threshold and h < threshold):
+                        self.sliceView.scene().removeItem(s)
+                    elif condition == "gt" and (w > threshold and h > threshold):
+                        self.sliceView.scene().removeItem(s)
             self.updateSliceList()
             self.statusBar().showMessage("切片篩選完成")
             self.markProjectEdited()
@@ -1493,18 +1544,18 @@ class MainWindow(QMainWindow):
         width, height = qimg.width(), qimg.height()
         ptr = qimg.bits()
         ptr.setsize(qimg.byteCount())
-        img_array = np.array(ptr).reshape(height, width, 4)
-        gray = cv2.cvtColor(img_array, cv2.COLOR_BGRA2GRAY)
+        img_array = array(ptr).reshape(height, width, 4)
+        gray = cvtColor(img_array, COLOR_BGRA2GRAY)
         # 根據用戶選擇的圖片風格應用不同二值化方式
         if style == "白底黑字":
-            _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
+            _, thresh = threshold(gray, 127, 255, THRESH_BINARY_INV)
         else:
-            _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+            _, thresh = threshold(gray, 127, 255, THRESH_BINARY)
         # 輪廓檢測
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = findContours(thresh, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE)
         rects = []
         for cnt in contours:
-            x, y, w, h = cv2.boundingRect(cnt)
+            x, y, w, h = boundingRect(cnt)
             rects.append(QRectF(x, y, w, h))
         for rect in rects:
             new_slice = SliceRect(rect, number=0)  # 編號後續於 updateSliceList 中更新
