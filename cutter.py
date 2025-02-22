@@ -120,14 +120,23 @@ class SliceRect(QGraphicsRectItem):
         if selected:
             if SliceRect.lastSelected and SliceRect.lastSelected != self:
                 for handle in SliceRect.lastSelected.handles.values():
-                    handle.hide()
+                    try:
+                        handle.hide()
+                    except RuntimeError:
+                        pass
             SliceRect.lastSelected = self
             for handle in self.handles.values():
-                handle.setVisible(fixedMode is None)
+                try:
+                    handle.setVisible(fixedMode is None)
+                except RuntimeError:
+                    pass
             self.updateHandles()
         else:
             for handle in self.handles.values():
-                handle.hide()
+                try:
+                    handle.hide()
+                except RuntimeError:
+                    pass
             if SliceRect.lastSelected == self:
                 SliceRect.lastSelected = None
 
@@ -739,7 +748,7 @@ class FilterSlicesDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("囫圇切 HulenCut v0.5.4")
+        self.setWindowTitle("囫圇切 HulenCut v0.5.5")
         self.setWindowIcon(QIcon(resource_path("hulencutter.ico")))
         self.resize(800, 600)
         self.fixedSliceSize = None
@@ -809,42 +818,68 @@ class MainWindow(QMainWindow):
 
     # 置頂
     def topSlice(self):
-        currentRow = self.sliceList.currentRow()
-        if currentRow < 0: return
-        item = self.sliceList.takeItem(currentRow)
-        self.sliceList.insertItem(0, item)
-        self.sliceList.setCurrentRow(0)
-        self.reorderSlices()
+        if self.sliceList.count() == 0:
+            return
+        items = []
+        for i in range(self.sliceList.count()):
+            lw_item = self.sliceList.item(i)
+            items.append((lw_item.data(Qt.UserRole), lw_item.isSelected()))
+        # 將所有被選項移至最前方，保持相對順序
+        new_order = [x for x in items if x[1]] + [x for x in items if not x[1]]
+        for index, (s, _) in enumerate(new_order):
+            s.number = index + 1
+        self.updateSliceList()
         self.markProjectEdited()
 
     # 上移
     def upSlice(self):
-        currentRow = self.sliceList.currentRow()
-        if currentRow <= 0: return
-        item = self.sliceList.takeItem(currentRow)
-        self.sliceList.insertItem(currentRow - 1, item)
-        self.sliceList.setCurrentRow(currentRow - 1)
-        self.reorderSlices()
+        count = self.sliceList.count()
+        if count == 0:
+            return
+        items = []
+        for i in range(count):
+            lw_item = self.sliceList.item(i)
+            items.append((lw_item.data(Qt.UserRole), lw_item.isSelected()))
+        # 從上至下檢查：若當前被選中且前一項未被選中，與前者交換
+        for i in range(1, len(items)):
+            if items[i][1] and not items[i-1][1]:
+                items[i-1], items[i] = items[i], items[i-1]
+        for index, (s, _) in enumerate(items):
+            s.number = index + 1
+        self.updateSliceList()
         self.markProjectEdited()
 
     # 下移
     def downSlice(self):
-        currentRow = self.sliceList.currentRow()
-        if currentRow < 0 or currentRow >= self.sliceList.count() - 1: return
-        item = self.sliceList.takeItem(currentRow)
-        self.sliceList.insertItem(currentRow + 1, item)
-        self.sliceList.setCurrentRow(currentRow + 1)
-        self.reorderSlices()
+        count = self.sliceList.count()
+        if count == 0:
+            return
+        items = []
+        for i in range(count):
+            lw_item = self.sliceList.item(i)
+            items.append((lw_item.data(Qt.UserRole), lw_item.isSelected()))
+        # 從下至上檢查：若當前被選中且下一項未被選中，與下一項交換
+        for i in range(len(items) - 2, -1, -1):
+            if items[i][1] and not items[i+1][1]:
+                items[i], items[i+1] = items[i+1], items[i]
+        for index, (s, _) in enumerate(items):
+            s.number = index + 1
+        self.updateSliceList()
         self.markProjectEdited()
 
     # 置底
     def bottomSlice(self):
-        currentRow = self.sliceList.currentRow()
-        if currentRow < 0: return
-        item = self.sliceList.takeItem(currentRow)
-        self.sliceList.insertItem(self.sliceList.count(), item)
-        self.sliceList.setCurrentRow(self.sliceList.count() - 1)
-        self.reorderSlices()
+        if self.sliceList.count() == 0:
+            return
+        items = []
+        for i in range(self.sliceList.count()):
+            lw_item = self.sliceList.item(i)
+            items.append((lw_item.data(Qt.UserRole), lw_item.isSelected()))
+        # 將所有被選項移至後方，保持相對順序
+        new_order = [x for x in items if not x[1]] + [x for x in items if x[1]]
+        for index, (s, _) in enumerate(new_order):
+            s.number = index + 1
+        self.updateSliceList()
         self.markProjectEdited()
 
     def updateSliceList(self):
@@ -854,9 +889,8 @@ class MainWindow(QMainWindow):
         for i, s in enumerate(slices):
             s.number = i + 1
 
-        # 保存當前選中的切片
-        current_item = self.sliceList.currentItem()
-        selected_slice = current_item.data(Qt.UserRole) if current_item else None
+        # 保存所有選中的切片
+        selected_slices = set(item.data(Qt.UserRole) for item in self.sliceList.selectedItems())
         self.sliceList.clear()
         for s in slices:
             rect = s.rect()
@@ -865,12 +899,12 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(f"切片 {s.number}（{x},{y} | {w}x{h}）")
             item.setData(Qt.UserRole, s)
             self.sliceList.addItem(item)
-        # 恢復先前選中的切片
-        if selected_slice is not None:
-            for i in range(self.sliceList.count()):
-                if self.sliceList.item(i).data(Qt.UserRole) is selected_slice:
-                    self.sliceList.setCurrentRow(i)
-                    break
+            # 保持之前選中狀態
+            if s in selected_slices:
+                item.setSelected(True)
+        # 如果沒有任何項目被選中，更新狀態欄
+        if not selected_slices:
+            self.statusBar().showMessage("已取消選擇")
 
     def onSliceItemClicked(self, item):
         if item.isSelected() and len(self.sliceList.selectedItems()) == 1:
@@ -1248,7 +1282,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"導出完成, 輸出目錄：{export_dir}")
 
     def showAbout(self):
-        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.4\n\n左鍵拖拽創建切片，雙擊選擇切片，或在列表中選擇。\n對着手柄雙擊後按住左鍵拖拽以調整切片邊緣。\n按住 Ctrl 在視圖中進行 單擊/拖拽 以多選。\n雙擊後按住左鍵拖拽移動切片，也可用方向鍵移動。\n右鍵切片以刪除，或在列表中 右鍵/Delete 鍵刪除。\n當指定了切片固定長寬時不支持雙擊操作。\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絕讚狗啃中")
+        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.5\n\n左鍵拖拽創建切片，雙擊選擇切片，或在列表中選擇。\n對着手柄雙擊後按住左鍵拖拽以調整切片邊緣。\n按住 Ctrl 在視圖中進行 單擊/拖拽 以多選。\n雙擊後按住左鍵拖拽移動切片，也可用方向鍵移動。\n右鍵切片以刪除，或在列表中 右鍵/Delete 鍵刪除。\n當指定了切片固定長寬時不支持雙擊操作。\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絕讚狗啃中")
 
     def openProject(self):
         path, _ = QFileDialog.getOpenFileName(self, "導入工程", "", "工程文件 (*.cutter)")
