@@ -83,9 +83,10 @@ class SliceRect(QGraphicsRectItem):
                 if hasattr(main, "updateSliceList"):
                     main.updateSliceList()
 
-    def __init__(self, rect, number, *args, **kwargs):
+    def __init__(self, rect, number, *args, name="", **kwargs):
         super().__init__(rect, *args, **kwargs)
         self.number = number
+        self.name = name  # 新增屬性
         self.setFlag(QGraphicsRectItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsRectItem.ItemIsMovable, True)
         self.createHandles()
@@ -163,7 +164,8 @@ class SliceRect(QGraphicsRectItem):
                 if hasattr(parent, "statusBar"):
                     rect = self.rect()
                     x, y, w, h = int(rect.x()), int(rect.y()), int(rect.width()), int(rect.height())
-                    parent.statusBar().showMessage(f"已選擇：切片 {self.number}（X:{x} Y:{y} 寬:{w} 高:{h}）")
+                    name_msg = f" | {self.name}" if self.name else ""
+                    parent.statusBar().showMessage(f"已選擇：切片 {self.number}{name_msg}（X:{x} Y:{y} 寬:{w} 高:{h}）")
         else:
             if self.scene() and self.scene().views():
                 parent = self.scene().views()[0].parent()
@@ -181,8 +183,26 @@ class SliceRect(QGraphicsRectItem):
 
     def contextMenuEvent(self, event):
         menu = QMenu()
-        act = menu.addAction("刪除切片")
-        if menu.exec_(event.screenPos()) == act:
+        renameAct = menu.addAction("重命名切片")
+        deleteAct = menu.addAction("刪除切片")
+        action = menu.exec_(event.screenPos())
+        if action == renameAct:
+            from PyQt5.QtWidgets import QInputDialog, QMessageBox
+            newName, ok = QInputDialog.getText(self.scene().views()[0].parent(), "重命名", "請輸入新名稱：", text=self.name)
+            if ok:
+                import re
+                if re.search(r'[<>*?/\\]', newName):
+                    QMessageBox.warning(self.scene().views()[0].parent(), "錯誤", "名稱包含非法字符")
+                else:
+                    self.name = newName.strip()
+                    main = self.scene().views()[0].parent()
+                    main.statusBar().showMessage(f"已重命名切片 {self.number}" + (f" 爲: {self.name}" if self.name else ""))
+                    if hasattr(main, "updateSliceList"):
+                        main.updateSliceList()
+                    if hasattr(main, "markProjectEdited"):
+                        main.markProjectEdited()
+            event.accept()
+        elif action == deleteAct:
             if self.scene() and self.scene().views():
                 parent = self.scene().views()[0].parent()
                 if hasattr(parent, "statusBar"):
@@ -573,10 +593,41 @@ class SliceListWidget(QListWidget):
 
     def showContextMenu(self, pos):
         menu = QMenu(self)
+        selected_items = self.selectedItems()
+        if len(selected_items) == 1:
+            renameAction = menu.addAction("重命名切片")
+        clearNameAction = menu.addAction("刪除名稱")
         deleteAction = menu.addAction("刪除切片")
         action = menu.exec_(self.mapToGlobal(pos))
-        if action == deleteAction:
+        if len(selected_items) == 1 and action == renameAction:
+            item = selected_items[0]
+            slice_item = item.data(Qt.UserRole)
+            if slice_item:
+                newName, ok = QInputDialog.getText(self, "重命名切片", "請輸入新名稱：", text=slice_item.name)
+                if ok:
+                    import re
+                    if re.search(r'[<>*?/\\]', newName):
+                        QMessageBox.warning(self, "錯誤", "名稱包含非法字符")
+                    else:
+                        slice_item.name = newName.strip()
+                        if self.window() and hasattr(self.window(), "statusBar"):
+                            self.window().statusBar().showMessage(f"已重命名切片 {slice_item.number}")
+                        if hasattr(self.window(), "updateSliceList"):
+                            self.window().updateSliceList()
+                        if hasattr(self.window(), "markProjectEdited"):
+                            self.window().markProjectEdited()
+        elif action == clearNameAction:
+            for item in selected_items:
+                slice_item = item.data(Qt.UserRole)
+                if slice_item:
+                    slice_item.name = ""
+            if self.window() and hasattr(self.window(), "updateSliceList"):
+                self.window().updateSliceList()
+            if self.window() and hasattr(self.window(), "statusBar"):
+                self.window().statusBar().showMessage("已清空選定切片名稱")
+        elif action == deleteAction:
             self.deleteSelectedItems()
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Delete:
             self.deleteSelectedItems()
@@ -789,13 +840,47 @@ class CheckUpdateDialog(QDialog):
             layout.addLayout(btnLayout)
             QApplication.beep()
 
+# 批量重命名對話框
+class BatchRenameDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("批量重命名")
+        mainLayout = QVBoxLayout(self)
+        topLayout = QHBoxLayout()
+        self.btnImport = QPushButton("導入txt", self)
+        self.btnImport.clicked.connect(self.importTxt)
+        topLayout.addWidget(self.btnImport)
+        mainLayout.addLayout(topLayout)
+        self.textEdit = QTextEdit(self)
+        mainLayout.addWidget(self.textEdit)
+        bottomLayout = QHBoxLayout()
+        bottomLayout.addStretch()
+        self.btnConfirm = QPushButton("確定", self)
+        self.btnConfirm.clicked.connect(self.accept)
+        bottomLayout.addWidget(self.btnConfirm)
+        mainLayout.addLayout(bottomLayout)
+        
+    def importTxt(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "選擇txt文件", "", "Text Files (*.txt)")
+        if file_path:
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                self.textEdit.setPlainText(content)
+            except Exception as e:
+                QMessageBox.warning(self, "錯誤", f"無法讀取文件: {e}")
+    
+    def getRenameLines(self):
+        lines = self.textEdit.toPlainText().splitlines()
+        return [line.strip() for line in lines if line.strip()]
+
 # 主視窗
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         QApplication.setApplicationName("HulenCut")
-        self.setWindowTitle("囫圇切 HulenCut v0.5.8")
-        self.currentVersion = "v0.5.8"  # 當前版本號
+        self.setWindowTitle("囫圇切 HulenCut v0.5.9")
+        self.currentVersion = "v0.5.9"  # 當前版本號
         self.setWindowIcon(QIcon(resource_path("hulencutter.ico")))
         self.resize(800, 600)
         self.fixedSliceSize = None
@@ -829,11 +914,15 @@ class MainWindow(QMainWindow):
         btnLayout.addWidget(self.btnBottom)
         vLayout.addLayout(btnLayout)
         vLayout.addWidget(self.sliceList)
-        sliceListContainer.setLayout(vLayout)
-        # 原有清空切片按鈕與列表
+        btnClearNames = QPushButton("清空切片名稱", self)
+        btnClearNames.clicked.connect(self.clearAllSliceNames)
         btnClear = QPushButton("清空切片", self)
         btnClear.clicked.connect(self.clearAllSlices)
-        vLayout.addWidget(btnClear)
+        btnClearLayout = QHBoxLayout()
+        btnClearLayout.addWidget(btnClearNames)
+        btnClearLayout.addWidget(btnClear)
+        vLayout.addLayout(btnClearLayout)
+        sliceListContainer.setLayout(vLayout)
         dockList = QDockWidget("切片列表", self)
         dockList.setWidget(sliceListContainer)
         self.addDockWidget(Qt.LeftDockWidgetArea, dockList)
@@ -945,7 +1034,11 @@ class MainWindow(QMainWindow):
         for s in slices:
             rect = s.rect()
             x, y, w, h = int(rect.x()), int(rect.y()), int(rect.width()), int(rect.height())
-            item = QListWidgetItem(f"切片 {s.number}（{x},{y} | {w}x{h}）")
+            if s.name:
+                text = f"切片 {s.number} | {s.name}（{x},{y} | {w}x{h}）"
+            else:
+                text = f"切片 {s.number}（{x},{y} | {w}x{h}）"
+            item = QListWidgetItem(text)
             item.setData(Qt.UserRole, s)
             self.sliceList.addItem(item)
             # 保持之前選中狀態
@@ -1067,8 +1160,8 @@ class MainWindow(QMainWindow):
         actionMenu = QMenu("動作", self)
         actAutoRecognize = QAction("自動識別切片", self)
         actAutoRecognize.triggered.connect(self.autoRecognizeWordSlices)
-        actionMenu.addAction(actAutoRecognize)
         actAutoRecognize.setShortcut("Ctrl+R")
+        actionMenu.addAction(actAutoRecognize)
         actDivide = QAction("劃分切片", self)
         actDivide.triggered.connect(self.openDivideSlicesDialog)
         actionMenu.addAction(actDivide)
@@ -1093,6 +1186,11 @@ class MainWindow(QMainWindow):
         actMerge.triggered.connect(self.mergeOverlappingSlices)
         actionMenu.addAction(actMerge)
         actMerge.setShortcut("Ctrl+G")
+        actionMenu.addAction(actMerge)
+        actBatchRename = QAction("批量重命名", self)
+        actBatchRename.triggered.connect(self.openBatchRenameDialog)
+        actionMenu.addAction(actBatchRename)
+        actBatchRename.setShortcut("Ctrl+N")
         actionButton = QToolButton(self)
         actionButton.setText("動作")
         actionButton.setMenu(actionMenu)
@@ -1295,7 +1393,7 @@ class MainWindow(QMainWindow):
             directory = os.path.dirname(self.currentImagePath)
             base = os.path.splitext(os.path.basename(self.currentImagePath))[0]
             proj_path = os.path.join(directory, base + ".cutter")
-            if (os.path.exists(proj_path)):
+            if os.path.exists(proj_path):
                 # 先移除現有切片（保留圖片項）
                 for item in self.sliceView.scene().items():
                     if isinstance(item, SliceRect):
@@ -1303,33 +1401,43 @@ class MainWindow(QMainWindow):
                 with open(proj_path, "r", encoding="utf-8") as f:
                     lines = f.readlines()
                     for i, l in enumerate(lines):
-                        tmp = [float(j) for j in l.strip().split("\t")]
-                        new_slice = SliceRect(QRectF(tmp[0], tmp[1], tmp[2], tmp[3]), i+1)
-                        self.sliceView.scene().addItem(new_slice)
+                        parts = l.strip().split("\t")
+                        if len(parts) >= 5:  # 確保有足夠的數據
+                            try:
+                                x, y, w, h = map(float, parts[:4])
+                                name = parts[4]
+                                new_slice = SliceRect(QRectF(x, y, w, h), i+1, name=name)
+                                self.sliceView.scene().addItem(new_slice)
+                            except ValueError:
+                                self.statusBar().showMessage(f"無效數據在行 {i+1}: {l.strip()}")
                 self.updateSliceList()
                 self.statusBar().showMessage(f"自動載入工程文件：{os.path.basename(proj_path)}")
+            json_path = os.path.splitext(self.currentImagePath)[0] + ".json"
+            cutter_path = os.path.splitext(self.currentImagePath)[0] + ".cutter"
+            if os.path.exists(json_path) and not os.path.exists(cutter_path):
+                # 自動對其進行第1513行至第1595行的操作
+                self.importKandianJson(json_path)
 
     def writeProjectFile(self, file_path):
         slices = [item for item in self.sliceView.scene().items() if isinstance(item, SliceRect)]
         slices.sort(key=lambda s: s.number)
-        # 將每個切片的數據以整數格式寫入，保留與狀態欄一致的精度
+        # 改成 5 個欄位：X Y 寬 高 名稱（即使名稱為空）
         projectData = "\n".join([
             "\t".join([
                 str(int(item.rect().x())),
                 str(int(item.rect().y())),
                 str(int(item.rect().width())),
-                str(int(item.rect().height()))
+                str(int(item.rect().height())),
+                item.name  # 可能為空
             ]) for item in slices
         ])
         if not projectData.strip():
-            # 工程數據爲空，刪除文件以避免冗餘
             if os.path.exists(file_path):
                 os.remove(file_path)
             self.statusBar().showMessage("工程已保存：無切片數據，空工程文件已刪除")
         else:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(projectData)
-            QApplication.beep()  # 保存後發聲提示
             self.statusBar().showMessage(f"工程已保存：{file_path}")
 
     def saveProject(self):
@@ -1383,14 +1491,17 @@ class MainWindow(QMainWindow):
         for idx, item in enumerate(slices, start=1):
             rect = item.rect().toRect()
             cropped = original.copy(rect)
-            file_name = f"{base}_{idx:03d}.{fmt.lower()}"
+            if item.name:
+                file_name = f"{base}_{idx:03d}_{item.name}.{fmt.lower()}"
+            else:
+                file_name = f"{base}_{idx:03d}.{fmt.lower()}"
             file_path = os.path.join(export_dir, file_name)
             cropped.save(file_path, fmt)
         QApplication.beep()   # 導出成功後發出系統聲音提示
         self.statusBar().showMessage(f"導出完成, 輸出目錄：{export_dir}")
 
     def showAbout(self):
-        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.8\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絶讚狗啃中")
+        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.9\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絶讚狗啃中")
         
     def showManual(self):
         manual_text = (
@@ -1433,8 +1544,14 @@ class MainWindow(QMainWindow):
             with open(path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
                 for i, l in enumerate(lines):
-                    tmp = [float(j) for j in l.strip().split("\t")]
-                    new_slice = SliceRect(QRectF(tmp[0], tmp[1], tmp[2], tmp[3]), i+1)
+                    parts = l.strip().split("\t")
+                    if len(parts) >= 5:
+                        x, y, w, h = map(int, parts[:4])
+                        name = parts[4]
+                    else:
+                        x, y, w, h = map(int, parts[:4])
+                        name = ""
+                    new_slice = SliceRect(QRectF(x, y, w, h), i+1, name=name)
                     self.sliceView.scene().addItem(new_slice)
             self.updateSliceList()
             self.statusBar().showMessage(f"已載入工程：{os.path.basename(path)}")
@@ -1469,7 +1586,6 @@ class MainWindow(QMainWindow):
             for s in slices:
                 s.setRect(s.rect().translated(dx, dy))
             self.updateSliceList()
-            QApplication.beep()
             self.statusBar().showMessage("切片移動完成")
             self.markProjectEdited()
 
@@ -1495,29 +1611,30 @@ class MainWindow(QMainWindow):
                 new_rect = QRectF(cx - new_w/2, cy - new_h/2, new_w, new_h)
                 s.setRect(new_rect)
             self.updateSliceList()
-            QApplication.beep()
             self.statusBar().showMessage("切片縮放完成")
             self.markProjectEdited()
 
-    def importKandianJson(self):
-        # 檢査當前是否有處理的圖片
+    def importKandianJson(self, jsonFilePath=None):
+        # 檢查是否有當前圖片
         if not self.currentImagePath:
             QApplication.beep()
             self.statusBar().showMessage("請先導入圖片")
             return
-
-        json_path, _ = QFileDialog.getOpenFileName(self, "選擇看典古籍json", "", "JSON 文件 (*.json)")
-        if not json_path:
-            return
-
-        # 讀取看典古籍json數據並轉換
+    
+        # 若未提供路徑則由使用者選擇 json
+        if not jsonFilePath:
+            jsonFilePath, _ = QFileDialog.getOpenFileName(self, "選擇看典古籍json", "", "JSON 文件 (*.json)")
+            if not jsonFilePath:
+                return
+    
+        # 讀取 json 並轉換
         try:
-            with open(json_path, 'r', encoding='utf-8') as f:
+            with open(jsonFilePath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         except Exception as e:
             self.statusBar().showMessage(f"錯誤：讀取json失敗：{e}")
             return
-
+    
         # 定義輔助函數：根據 pts 資料計算矩形
         def computeRect(pts):
             if pts and isinstance(pts[0], (int, float)):
@@ -1531,7 +1648,7 @@ class MainWindow(QMainWindow):
                 if xs and ys:
                     return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
             return None
-
+    
         slices = []
         slice_index = 0
         # 對於每一行，計算外接矩形，並進一步劃分爲多個切片（如果有 "words" 的位置信息）
@@ -1542,10 +1659,12 @@ class MainWindow(QMainWindow):
                 for word in line["words"]:
                     pts = word.get("position", [])
                     rect = computeRect(pts)
-                    if (rect):
+                    name = word.get("text", "")
+                    if rect:
                         slices.append({
                             "number": slice_index,
-                            "rect": list(rect)
+                            "rect": list(rect),
+                            "name": name
                         })
                         slice_index += 1
                         has_valid = True
@@ -1555,15 +1674,18 @@ class MainWindow(QMainWindow):
             # 使用整行的 position 數據
             pts = line.get("position", [])
             rect = computeRect(pts)
-            if (rect):
+            if rect:
+                # 使用整行的 text 作為名稱
+                name = line.get("text", "")
                 slices.append({
                     "number": slice_index,
-                    "rect": list(rect)
+                    "rect": list(rect),
+                    "name": name
                 })
                 slice_index += 1
-
+    
         # 生成同名的 .cutter 工程文件
-        cutterfn = os.path.splitext(json_path)[0] + ".cutter"
+        cutterfn = os.path.splitext(jsonFilePath)[0] + ".cutter"
         project = {
             "image": self.currentImagePath,
             "slices": slices
@@ -1574,19 +1696,19 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.statusBar().showMessage(f"錯誤：寫入工程文件失敗：{e}")
             return
-
+    
         # 清空現有切片（保留圖片項）
         scene = self.sliceView.scene()
         for item in list(scene.items()):
             if isinstance(item, SliceRect):
                 scene.removeItem(item)
-
+    
         # 根據轉換後數據新增切片
         for s in slices:
             rect_values = s["rect"]
-            new_slice = SliceRect(QRectF(*rect_values), s["number"])
+            new_slice = SliceRect(QRectF(*rect_values), s["number"], name=s.get("name", ""))
             scene.addItem(new_slice)
-
+    
         # 在顯示成功導入訊息前，覆寫當前切片列表工程至 cutterfn 文件
         self.writeProjectFile(cutterfn)
         
@@ -1675,7 +1797,6 @@ class MainWindow(QMainWindow):
         for s in items:
             s.setSelected(True)
         self.updateSliceList()
-        QApplication.beep()
         self.statusBar().showMessage("劃分切片完成")
         if hasattr(self, "markProjectEdited"):
             self.markProjectEdited()
@@ -1708,7 +1829,6 @@ class MainWindow(QMainWindow):
                 new_rect = QRectF(center.x() - new_width/2, center.y() - new_height/2, new_width, new_height)
                 s.setRect(new_rect)
             self.updateSliceList()
-            QApplication.beep()
             if hasattr(self, "statusBar"):
                 self.statusBar().showMessage(f"切片規整化完成")
             if hasattr(self, "markProjectEdited"):
@@ -1794,7 +1914,6 @@ class MainWindow(QMainWindow):
             new_slice = SliceRect(union_rect, number=0)
             self.sliceView.scene().addItem(new_slice)
         self.updateSliceList()
-        QApplication.beep()
         self.statusBar().showMessage("合併重疊切片完成")
         self.markProjectEdited()
 
@@ -1805,6 +1924,34 @@ class MainWindow(QMainWindow):
             if target != self.currentImageIndex:
                 self.currentImageIndex = target
                 self.loadCurrentFolderImage()
+
+    # 批量重命名方法
+    def openBatchRenameDialog(self):
+        dlg = BatchRenameDialog(self)
+        if dlg.exec_() == QDialog.Accepted:
+            lines = dlg.getRenameLines()
+            if not lines:
+                self.statusBar().showMessage("無有效重命名內容")
+                return
+            count = self.sliceList.count()
+            for i in range(min(len(lines), count)):
+                item = self.sliceList.item(i)
+                slice_item = item.data(Qt.UserRole)
+                if slice_item:
+                    slice_item.name = lines[i]
+            self.updateSliceList()
+            self.statusBar().showMessage("批量重命名完成")
+
+    # 清空切片名稱功能
+    def clearAllSliceNames(self):
+        for i in range(self.sliceList.count()):
+            item = self.sliceList.item(i)
+            slice_item = item.data(Qt.UserRole)
+            if slice_item:
+                slice_item.name = ""
+        self.updateSliceList()
+        self.statusBar().showMessage("已清空全部切片名稱")
+        self.markProjectEdited()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -1,10 +1,25 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+
+# 修改後的自定義 tree 函數，僅加入有效檔案，避免加入目錄
+def tree(src, prefix):
+    res = []
+    for root, dirs, files in os.walk(src):
+        for file in files:
+            full_path = os.path.join(root, file)
+            if os.path.isfile(full_path):  # 僅加入有效檔案
+                dest_path = os.path.join(prefix, os.path.relpath(root, src))
+                res.append((full_path, dest_path))
+    return res
+
+# 定義並過濾資料資源
+data_files = [d for d in tree('dist/HulenCut', 'HulenCut') if os.path.isfile(d[0])]
 
 a = Analysis(
     ['cutter.py'],
     pathex=[],
     binaries=[],
-    datas=[('hulencutter.ico', '.')],
+    datas=data_files,  # 使用已過濾的資料資源
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -41,7 +56,7 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.zipfiles,
-    a.datas,
+    data_files,  # 統一使用 data_files
     strip=False,
     upx=True,
     upx_exclude=[],
