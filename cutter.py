@@ -879,8 +879,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         QApplication.setApplicationName("HulenCut")
-        self.setWindowTitle("囫圇切 HulenCut v0.5.9")
-        self.currentVersion = "v0.5.9"  # 當前版本號
+        self.setWindowTitle("囫圇切 HulenCut v0.6.0")
+        self.currentVersion = "v0.6.0"  # 當前版本號
         self.setWindowIcon(QIcon(resource_path("hulencutter.ico")))
         self.resize(800, 600)
         self.fixedSliceSize = None
@@ -1410,6 +1410,13 @@ class MainWindow(QMainWindow):
                                 self.sliceView.scene().addItem(new_slice)
                             except ValueError:
                                 self.statusBar().showMessage(f"無效數據在行 {i+1}: {l.strip()}")
+                        elif len(parts) == 4: # 向下兼容
+                            try:
+                                x, y, w, h = map(float, parts[:4])
+                                new_slice = SliceRect(QRectF(x, y, w, h), i+1)
+                                self.sliceView.scene().addItem(new_slice)
+                            except ValueError:
+                                self.statusBar().showMessage(f"無效數據在行 {i+1}: {l.strip()}")
                 self.updateSliceList()
                 self.statusBar().showMessage(f"自動載入工程文件：{os.path.basename(proj_path)}")
             json_path = os.path.splitext(self.currentImagePath)[0] + ".json"
@@ -1501,7 +1508,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"導出完成, 輸出目錄：{export_dir}")
 
     def showAbout(self):
-        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.5.9\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絶讚狗啃中")
+        QMessageBox.about(self, "關於", "囫圇切 HulenCut v0.6.0\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nBasic 低手\n\n活字攷古 @hulenkius 絶讚狗啃中")
         
     def showManual(self):
         manual_text = (
