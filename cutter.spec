@@ -1,25 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
-import os
+from pathlib import Path
 
-# 修改後的自定義 tree 函數，僅加入有效檔案，避免加入目錄
-def tree(src, prefix):
-    res = []
-    for root, dirs, files in os.walk(src):
-        for file in files:
-            full_path = os.path.join(root, file)
-            if os.path.isfile(full_path):  # 僅加入有效檔案
-                dest_path = os.path.join(prefix, os.path.relpath(root, src))
-                res.append((full_path, dest_path))
-    return res
-
-# 定義並過濾資料資源
-data_files = [d for d in tree('dist/HulenCut', 'HulenCut') if os.path.isfile(d[0])]
+ROOT = Path(SPECPATH)
 
 a = Analysis(
-    ['cutter.py'],
-    pathex=[],
+    [str(ROOT / "cutter.py")],
+    pathex=[str(ROOT)],
     binaries=[],
-    datas=data_files,  # 使用已過濾的資料資源
+    datas=[
+        (str(ROOT / "hulencutter.ico"), "."),
+        (str(ROOT / "cutter_app" / "locales"), "cutter_app/locales"),
+        (str(ROOT / "cutter_app" / "assets"), "cutter_app/assets"),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -36,7 +28,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='HulenCut',
+    name="HulenCut",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -49,16 +41,16 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='hulencutter.ico',
+    icon=str(ROOT / "hulencutter.ico"),
 )
 
 coll = COLLECT(
     exe,
     a.binaries,
     a.zipfiles,
-    data_files,  # 統一使用 data_files
+    a.datas,
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='HulenCut'
+    name="HulenCut",
 )
