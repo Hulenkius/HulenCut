@@ -78,7 +78,7 @@ python -m cutter_app
 | `Ctrl+S` | 保存工程 |
 | `Ctrl+E` | 导出切片 |
 | `Ctrl+K` | 命令面板 |
-| `Ctrl+R` | 自动识别文字切片 |
+| `Ctrl+R` | 自动识别切片 |
 | `Ctrl+T` | 自动识别表格 |
 | `Ctrl+D` | 划分切片 |
 | `Ctrl+M` | 移动切片 |
