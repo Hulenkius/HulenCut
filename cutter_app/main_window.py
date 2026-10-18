@@ -65,8 +65,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         QApplication.setApplicationName("HulenCut")
-        self.setWindowTitle(tr("囫圇切 HulenCut v0.8.0"))
-        self.currentVersion = "v0.8.0"  # 當前版本號
+        self.setWindowTitle(tr("囫圇切 HulenCut v0.8.1"))
+        self.currentVersion = "v0.8.1"  # 當前版本號
         self.setWindowIcon(QIcon(resource_path("hulencutter.ico")))
         self.setAcceptDrops(True)
         self.resize(1280, 800)
@@ -1600,7 +1600,7 @@ class MainWindow(QMainWindow):
             self.recorder.log_action("exportSlices")
 
     def showAbout(self):
-        QMessageBox.about(self, tr("關於"), tr("囫圇切 HulenCut v0.8.0\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nDeepSeek Harness\nBasic 低手\n南池子\nKushim Jiang\n\n活字攷古 @hulenkius 絶讚狗啃中"))
+        QMessageBox.about(self, tr("關於"), tr("囫圇切 HulenCut v0.8.1\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nDeepSeek Harness\nBasic 低手\n南池子\nKushim Jiang\n\n活字攷古 @hulenkius 絶讚狗啃中"))
         
     def showManual(self):
         manual_text = (

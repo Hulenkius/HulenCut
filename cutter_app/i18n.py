@@ -151,6 +151,21 @@ class TranslationManager(QObject):
         if isinstance(obj, QDialogButtonBox):
             self._translate_dialog_buttons(obj)
 
+        # Tooltips are set explicitly on several compact controls, so they do
+        # not follow the translated label automatically.  Translate them here
+        # as part of the same live language switch.
+        tooltip = obj.toolTip()
+        if tooltip:
+            translated_tooltip = self._translate_text(tooltip)
+            if translated_tooltip != tooltip:
+                obj.setToolTip(translated_tooltip)
+
+        status_tip = obj.statusTip()
+        if status_tip:
+            translated_status = self._translate_text(status_tip)
+            if translated_status != status_tip:
+                obj.setStatusTip(translated_status)
+
     def _translate_action(self, action: QAction) -> None:
         if action.menu() is not None:
             return
@@ -158,6 +173,18 @@ class TranslationManager(QObject):
         translated = self._translate_text(text)
         if translated != text:
             action.setText(translated)
+
+        tooltip = action.toolTip()
+        if tooltip:
+            translated_tooltip = self._translate_text(tooltip)
+            if translated_tooltip != tooltip:
+                action.setToolTip(translated_tooltip)
+
+        status_tip = action.statusTip()
+        if status_tip:
+            translated_status = self._translate_text(status_tip)
+            if translated_status != status_tip:
+                action.setStatusTip(translated_status)
 
     def _retranslate_menu(self, menu: QMenu) -> None:
         menu.setTitle(self._translate_text(menu.title()))

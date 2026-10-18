@@ -35,7 +35,7 @@ class MainWindowSmokeTests(unittest.TestCase):
         window = MainWindow()
         self.assertIn("HulenCut", window.windowTitle())
         window.changeLanguage("en_US")
-        self.assertEqual(window.windowTitle(), "HulenCut v0.8.0")
+        self.assertEqual(window.windowTitle(), "HulenCut v0.8.1")
         window.changeLanguage("zh_TW")
         self.assertIn("囫圇切", window.windowTitle())
         window.close()
@@ -45,7 +45,7 @@ class MainWindowSmokeTests(unittest.TestCase):
         i18n.set_language("zh_TW", persist=False)
         window = MainWindow()
         window.changeLanguage("zh_CN")
-        self.assertEqual(window.windowTitle(), "囫囵切 HulenCut v0.8.0")
+        self.assertEqual(window.windowTitle(), "囫囵切 HulenCut v0.8.1")
         window.close()
         window.deleteLater()
 
@@ -126,6 +126,25 @@ class MainWindowSmokeTests(unittest.TestCase):
         self.assertTrue(window.navToolbar.isVisible())
         self.assertTrue(window.actToggleNavToolbar.isChecked())
         self.assertTrue(window.imageJumpSpin.isVisible())
+        window.close()
+        window.deleteLater()
+
+    def test_widget_tooltips_follow_language(self):
+        window = MainWindow()
+        window.changeLanguage("en_US")
+        self.assertEqual(
+            window.btnTop.toolTip(),
+            i18n.translate("將所選切片移到最前"),
+        )
+        self.assertEqual(
+            window.imageJumpSpin.toolTip(),
+            i18n.translate("跳轉圖片"),
+        )
+        window.changeLanguage("zh_CN")
+        self.assertEqual(
+            window.btnTop.toolTip(),
+            i18n.translate("將所選切片移到最前"),
+        )
         window.close()
         window.deleteLater()
 
