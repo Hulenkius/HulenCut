@@ -118,6 +118,17 @@ class MainWindowSmokeTests(unittest.TestCase):
         for name in ("spin_up_dark.png", "spin_down_dark.png", "spin_up_light.png", "spin_down_light.png"):
             self.assertTrue((assets / name).is_file(), name)
 
+    def test_navigation_toolbar_can_be_restored(self):
+        window = MainWindow()
+        window.show()
+        window.navToolbar.setVisible(False)
+        window._ensureToolbarVisibility()
+        self.assertTrue(window.navToolbar.isVisible())
+        self.assertTrue(window.actToggleNavToolbar.isChecked())
+        self.assertTrue(window.imageJumpSpin.isVisible())
+        window.close()
+        window.deleteLater()
+
     def test_public_entry_point_reexports_main_window(self):
         import cutter
 

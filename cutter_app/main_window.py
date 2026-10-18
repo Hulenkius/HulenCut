@@ -265,6 +265,7 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, dockFind)
 
         self.loadLayout()
+        self._ensureToolbarVisibility()
         
         # 切片列表選擇變更時更新預覽
         self.sliceList.itemSelectionChanged.connect(self.update_preview_panel)
@@ -318,7 +319,15 @@ class MainWindow(QMainWindow):
         self.resizeDocks(left_docks, [300, 105, 135, 300], Qt.Vertical)
         self.resizeDocks(right_docks, [500, 120], Qt.Vertical)
 
+    def _ensureToolbarVisibility(self) -> None:
+        if hasattr(self, "navToolbar"):
+            self.addToolBar(Qt.TopToolBarArea, self.navToolbar)
+            self.navToolbar.setVisible(True)
+        if hasattr(self, "actToggleNavToolbar"):
+            self.actToggleNavToolbar.setChecked(True)
+
     def resetDockLayout(self) -> None:
+        self._ensureToolbarVisibility()
         self.dockList.setVisible(True)
         self.dockDim.setVisible(True)
         self.dockStraight.setVisible(True)
@@ -952,6 +961,7 @@ class MainWindow(QMainWindow):
 
 
         navToolbar = self.addToolBar(tr("導航"))
+        self.navToolbar = navToolbar
         navToolbar.setObjectName("navToolbar")
         navToolbar.setMovable(False)
         navToolbar.setFloatable(False)
@@ -961,7 +971,6 @@ class MainWindow(QMainWindow):
         self._set_action_icon(prevAct, "chevron-left")
         prevAct.triggered.connect(self.prevImage)
         prevAct.setShortcut("Ctrl+Left")
-        prevAct.setToolTip("Ctrl+Left")
         navToolbar.addAction(prevAct)
         self.imageJumpSpin = QSpinBox(self)
         self.imageJumpSpin.setButtonSymbols(QAbstractSpinBox.NoButtons)
@@ -984,8 +993,13 @@ class MainWindow(QMainWindow):
         self._set_action_icon(nextAct, "chevron-right")
         nextAct.triggered.connect(self.nextImage)
         nextAct.setShortcut("Ctrl+Right")
-        nextAct.setToolTip("Ctrl+Right")
         navToolbar.addAction(nextAct)
+
+        self.actToggleNavToolbar = QAction(tr("導航"), self)
+        self.actToggleNavToolbar.setCheckable(True)
+        self.actToggleNavToolbar.setChecked(True)
+        self.actToggleNavToolbar.toggled.connect(self.navToolbar.setVisible)
+        windowMenu.insertAction(actResetLayout, self.actToggleNavToolbar)
 
         # 縮放欄
         zoomToolbar = self.addToolBar(tr("縮放"))
@@ -1112,6 +1126,8 @@ class MainWindow(QMainWindow):
         self.zoomCombo.setCurrentText(f"{int(f*100)}%")
 
     def syncWindowMenuActions(self):
+        if hasattr(self, "actToggleNavToolbar"):
+            self.actToggleNavToolbar.setChecked(self.navToolbar.isVisible())
         # 同步「窗口」選單項的勾選狀態
         self.actToggleSliceList.setChecked(self.findChild(QDockWidget, "dockList").isVisible())
         self.actToggleDimension.setChecked(self.findChild(QDockWidget, "dockDim").isVisible())
