@@ -299,7 +299,7 @@ QDockWidget::close-button, QDockWidget::float-button {{
 QDockWidget::close-button:hover, QDockWidget::float-button:hover {{
     background: {surface_hover};
 }}
-QListWidget, QTextEdit, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
+QListWidget, QTextEdit, QTextBrowser, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
     background: {surface};
     border: 1px solid {border};
     border-radius: 3px;

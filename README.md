@@ -7,7 +7,7 @@
 <p align="center">印刷品图像切片、表格识别、批量处理与导出的桌面工具</p>
 
 <p align="center">
-  <strong>v0.8.1</strong> · Windows 10/11 · 繁體中文 / 简体中文 / English
+  <strong>v0.8.2</strong> · Windows 10/11 · 繁體中文 / 简体中文 / English
 </p>
 
 ## 简介

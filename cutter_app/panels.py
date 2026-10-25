@@ -675,11 +675,15 @@ class AlignDistributeWidget(QWidget):
         self.btnHDistribute.clicked.connect(p.distribute_horizontal)
 
     def update_buttons_state(self):
-        # 改用 self.main 獲取 sliceView
-        sel = [
-            it for it in self.main.sliceView.scene().selectedItems()
-            if isinstance(it, SliceRect)
-        ]
+        # Selection signals can fire while the main window is being destroyed
+        # and its C++ SliceView has already been deleted.
+        try:
+            scene = self.main.sliceView.scene()
+            if scene is None:
+                return
+            sel = [it for it in scene.selectedItems() if isinstance(it, SliceRect)]
+        except (AttributeError, RuntimeError):
+            return
         enabled = len(sel) > 1
         for b in self.buttons:
             b.setEnabled(enabled)

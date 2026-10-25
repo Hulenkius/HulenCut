@@ -24,7 +24,7 @@ from cv2 import (
 )
 from PyQt5.QtCore import QRectF, QSettings, QSize, Qt, QTimer, QUrl
 from PyQt5.QtGui import QDesktopServices, QFont, QIcon, QImage, QPixmap, QTransform
-from PyQt5.QtWidgets import QAbstractSpinBox, QAction, QApplication, QComboBox, QDialog, QDockWidget, QFileDialog, QGraphicsItem, QHBoxLayout, QInputDialog, QLabel, QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPushButton, QSpinBox, QToolButton, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QAbstractSpinBox, QAction, QApplication, QComboBox, QDialog, QDockWidget, QFileDialog, QGraphicsItem, QHBoxLayout, QInputDialog, QLabel, QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPushButton, QSpinBox, QTextBrowser, QToolButton, QVBoxLayout, QWidget
 
 from .command_palette import CommandPaletteDialog
 from .dialogs import (
@@ -65,8 +65,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         QApplication.setApplicationName("HulenCut")
-        self.setWindowTitle(tr("囫圇切 HulenCut v0.8.1"))
-        self.currentVersion = "v0.8.1"  # 當前版本號
+        self.setWindowTitle(tr("囫圇切 HulenCut v0.8.2"))
+        self.currentVersion = "v0.8.2"  # 當前版本號
         self.setWindowIcon(QIcon(resource_path("hulencutter.ico")))
         self.setAcceptDrops(True)
         self.resize(1280, 800)
@@ -1600,37 +1600,34 @@ class MainWindow(QMainWindow):
             self.recorder.log_action("exportSlices")
 
     def showAbout(self):
-        QMessageBox.about(self, tr("關於"), tr("囫圇切 HulenCut v0.8.1\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nDeepSeek Harness\nBasic 低手\n南池子\nKushim Jiang\n\n活字攷古 @hulenkius 絶讚狗啃中"))
+        QMessageBox.about(self, tr("關於"), tr("囫圇切 HulenCut v0.8.2\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nDeepSeek Harness\nBasic 低手\n南池子\nKushim Jiang\n\n活字攷古 @hulenkius 絶讚狗啃中"))
         
     def showManual(self):
-        manual_text = (
-            tr("左鍵拖拽創建切片，雙擊選擇切片，或在列表中選擇。\n"
-            "對着手柄雙擊後按住左鍵拖拽以調整切片邊緣。\n"
-            "按住 Ctrl 在視圖中進行 單擊/拖拽 以多選。\n"
-            "雙擊後按住左鍵拖拽移動切片，也可用方向鍵移動。\n"
-            "右鍵切片以刪除，或在列表中 右鍵/Delete 鍵刪除。\n"
-            "當指定了切片固定寬高時不支持雙擊操作。\n"
-            "\n自動處理工具支持自動識別、移動、縮放、篩除、\n規整化、合併重疊、校正拉直、上一張、下一張、\n保存工程、導出切片、清空切片名稱。不支持創建切片、\n重命名、劃分切片、調整切片順序、裁剪圖片。\n"
-            "\n觀看教程影片以獲得更多幫助。")
-        )
+        manual_text = tr("operation_guide_body")
         dialog = QDialog(self)
         dialog.setWindowTitle(tr("操作指南"))
         layout = QVBoxLayout(dialog)
-        
-        lblManual = QLabel(manual_text, dialog)
-        lblManual.setWordWrap(True)
-        layout.addWidget(lblManual)
-        
-        # 底部按鈕區，參考檢査更新對話框排版
+
+        browser = QTextBrowser(dialog)
+        browser.setObjectName("manualBrowser")
+        browser.setPlainText(manual_text)
+        browser.setOpenExternalLinks(True)
+        browser.setMinimumSize(620, 460)
+        layout.addWidget(browser, 1)
+
         btnLayout = QHBoxLayout()
         btnTutorial = QPushButton(tr("教程影片"), dialog)
-        btnTutorial.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://space.bilibili.com/66758675/lists/4816821")))
+        btnTutorial.clicked.connect(
+            lambda: QDesktopServices.openUrl(
+                QUrl("https://space.bilibili.com/66758675/lists/4816821")
+            )
+        )
         btnLayout.addWidget(btnTutorial)
-        
+
         btnOk = QPushButton(tr("確定"), dialog)
         btnOk.clicked.connect(dialog.accept)
         btnLayout.addWidget(btnOk)
-        
+
         layout.addLayout(btnLayout)
         dialog.exec_()
 
@@ -2084,7 +2081,7 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
         try:
             response = urllib.request.urlopen("https://vistudium.top/gouken/UPDATE")
-            update_text = response.read().decode("utf-8")
+            update_text = response.read().decode("utf-8-sig")
         except Exception as e:
             update_text = tr("無法取得更新資訊：") + str(e)
         checkingDlg.close()

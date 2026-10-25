@@ -35,7 +35,7 @@ class MainWindowSmokeTests(unittest.TestCase):
         window = MainWindow()
         self.assertIn("HulenCut", window.windowTitle())
         window.changeLanguage("en_US")
-        self.assertEqual(window.windowTitle(), "HulenCut v0.8.1")
+        self.assertEqual(window.windowTitle(), "HulenCut v0.8.2")
         window.changeLanguage("zh_TW")
         self.assertIn("囫圇切", window.windowTitle())
         window.close()
@@ -45,7 +45,7 @@ class MainWindowSmokeTests(unittest.TestCase):
         i18n.set_language("zh_TW", persist=False)
         window = MainWindow()
         window.changeLanguage("zh_CN")
-        self.assertEqual(window.windowTitle(), "囫囵切 HulenCut v0.8.1")
+        self.assertEqual(window.windowTitle(), "囫囵切 HulenCut v0.8.2")
         window.close()
         window.deleteLater()
 

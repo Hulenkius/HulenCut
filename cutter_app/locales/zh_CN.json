@@ -95,7 +95,7 @@
     "向右移動：": "向右移动：",
     "向後搜索": "向后搜索",
     "和": "和",
-    "囫圇切 HulenCut v0.8.1": "囫囵切 HulenCut v0.8.1",
+    "囫圇切 HulenCut v0.8.2": "囫囵切 HulenCut v0.8.2",
     "圖像已校正 ": "图像已校正 ",
     "圖像校正將會清除所有現有切片。\n您確定要繼續嗎？": "图像校正将会清除所有现有切片。\n您确定要继续吗？",
     "圖像裁剪將清除所有現有切片。\n確定要繼續？": "图像裁剪将清除所有现有切片。\n确定要继续？",
@@ -372,6 +372,7 @@
     "清空所有切片名稱但不刪除切片": "清空所有切片名称但不删除切片",
     "刪除目前圖片上的所有切片": "删除目前图片上的所有切片",
     "尚未打開圖片\n\n拖入圖片、文件夾\n或按 Ctrl+O 導入": "尚未打开图片\n\n拖入图片、文件夹\n或按 Ctrl+O 导入",
-    "囫圇切 HulenCut v0.8.1\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nDeepSeek Harness\nBasic 低手\n南池子\nKushim Jiang\n\n活字攷古 @hulenkius 絶讚狗啃中": "囫囵切 HulenCut v0.8.1\n\nhttps://vistudium.top/gouken/\n\n鸣谢：\nGithub Copilot\nDeepSeek Harness\nBasic 低手\n南池子\nKushim Jiang\n\n活字攷古 @hulenkius 绝赞狗啃中"
+    "囫圇切 HulenCut v0.8.2\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nDeepSeek Harness\nBasic 低手\n南池子\nKushim Jiang\n\n活字攷古 @hulenkius 絶讚狗啃中": "囫囵切 HulenCut v0.8.2\n\nhttps://vistudium.top/gouken/\n\n鸣谢：\nGithub Copilot\nDeepSeek Harness\nBasic 低手\n南池子\nKushim Jiang\n\n活字攷古 @hulenkius 绝赞狗啃中",
+    "operation_guide_body": "HulenCut 操作指南\n\n【导入与导航】\n• 可拖入图片、文件夹或 .cutter 工程；也可从「导入」选单操作。\n• Ctrl+O 导入图片；Ctrl+Shift+O 导入文件夹；Ctrl+P 导入工程。\n• Ctrl+← / Ctrl+→ 切换上一张 / 下一张图片。\n• 工具列页码框可直接输入图片序号跳转。\n\n【切片选取与移动】\n• 在画布空白处按住左键拖拽，可建立新切片。\n• 左键单击切片可选取；Ctrl/Shift 单击或拖拽可多选。\n• 单击空白处可取消目前选取。\n• 鼠标侧键 4（后退键）单击可直接选取游标下的切片。\n• 按住鼠标侧键 5（前进键）拖拽，可移动已选取的切片。\n• 方向键移动 1px，Shift+方向键移动 10px。\n\n【缩放切片】\n• 选取切片后会显示八个缩放把手。\n• 将游标移到把手上，直接按住左键、侧键 4 或侧键 5 拖拽即可调整大小，无需双击。\n• 取消选取后把手会自动隐藏。\n\n【切片列表】\n• 每列显示编号、名称、X/Y/W/H，可直接拖拽排序。\n• 顶部按钮可将选取切片移到最前、上移、下移或移到最后。\n• 清空切片名称只清除名称；清空切片会删除目前图片全部切片。\n• 右键切片可重新命名或删除。\n\n【预览与搜寻】\n• 右侧预览可编辑切片名称、查看预计导出名称及切换上/下一切片。\n• Ctrl+K 开启命令面板，可搜寻并执行常用操作。\n• 查找切片支援目前图片或整个文件夹。\n\n【工程与导出】\n• Ctrl+S 保存 .cutter 工程；Ctrl+Shift+S 另存新档。\n• Ctrl+E 导出 PNG/JPG/BMP 切片。\n• 可于「导出 → 设定导出预设」设定默认目录与格式。\n\n【自动处理】\n• 支持自动识别、表格识别、移动、缩放、筛除、合并重叠、校正拉直与翻页。\n• 可录制、导入及执行 .cscript 脚本，并支持跨页循环。\n• 脚本执行导出前，请先设定默认导出目录与格式。\n• 不支持建立切片、重新命名、划分切片、调整切片顺序与裁剪图片。\n\n【界面】\n• 「设定 → 外观」切换深色、浅色或跟随系统。\n• 「设定 → 语言」切换繁体中文、简体中文或 English。\n• 「窗口 → 重设面板布局」可恢复默认布局。\n\n【注意】\n• 裁剪、校正或清空切片前，建议先保存工程。\n• 当前版本不提供撤销/重做。\n• 更多操作示范请观看教程影片。"
   }
 }

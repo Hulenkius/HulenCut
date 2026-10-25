@@ -1,4 +1,5 @@
 """Application dialogs."""
+import re
 import urllib.request
 
 from PyQt5.QtCore import QUrl
@@ -6,6 +7,25 @@ from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QMessageBox, QPushButton, QRadioButton, QSpinBox, QTextEdit, QVBoxLayout
 
 from .i18n import tr
+
+
+def _version_key(version: str) -> tuple[int, ...]:
+    """Normalize version text and return a comparable numeric tuple."""
+    text = str(version).replace("\ufeff", "").strip().lower()
+    if text.startswith("v"):
+        text = text[1:]
+    numbers = re.findall(r"\d+", text)
+    return tuple(int(part) for part in numbers)
+
+
+def is_newer_version(current_version: str, latest_version: str) -> bool:
+    current_key = _version_key(current_version)
+    latest_key = _version_key(latest_version)
+    if current_key and latest_key:
+        return latest_key > current_key
+    current_text = str(current_version).replace("\ufeff", "").strip().lower()
+    latest_text = str(latest_version).replace("\ufeff", "").strip().lower()
+    return latest_text != current_text
 
 
 class DivideSlicesDialog(QDialog):
@@ -506,7 +526,7 @@ class CheckUpdateDialog(QDialog):
                 update_text = tr("無法取得更新資訊：") + str(e)
         lines = update_text.splitlines()
         latest_version = lines[0] if lines else ""
-        if current_version.strip() != latest_version.strip():
+        if is_newer_version(current_version, latest_version):
             message = tr('🔔 有版本更新：{0}\n訪問官網獲取更新。').format(latest_version)
             msgLabel = QLabel(message, self)
             msgLabel.setOpenExternalLinks(True)

@@ -42,7 +42,7 @@ class SliceRect(QGraphicsRectItem):
                 "left": Qt.SizeHorCursor
             }
             self.setCursor(cursors.get(posKey, Qt.ArrowCursor))
-            self.setAcceptedMouseButtons(Qt.LeftButton)
+            self.setAcceptedMouseButtons(Qt.LeftButton | Qt.BackButton | Qt.ForwardButton)
             self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
 
         def mousePressEvent(self, event):
@@ -51,6 +51,8 @@ class SliceRect(QGraphicsRectItem):
             event.accept()
 
         def mouseMoveEvent(self, event):
+            if not (event.buttons() & (Qt.LeftButton | Qt.BackButton | Qt.ForwardButton)):
+                return
             delta = event.scenePos() - self.startPos
             r = QRectF(self.startRect)
             if self.posKey == "top_left":
@@ -84,6 +86,10 @@ class SliceRect(QGraphicsRectItem):
                 main = scene.views()[0].parent()
                 if hasattr(main, "updateSliceList"):
                     main.updateSliceList()
+                if hasattr(main, "update_preview_panel"):
+                    main.update_preview_panel()
+                if hasattr(main, "markProjectEdited"):
+                    main.markProjectEdited()
 
     def __init__(self, rect, number, *args, name="", **kwargs):
         super().__init__(rect, *args, **kwargs)
@@ -99,7 +105,7 @@ class SliceRect(QGraphicsRectItem):
         self.handles = {}
         for pos in handlePositions:
             handle = SliceRect.ResizeHandle(pos, self)
-            handle.setRect(0, 0, 8, 8)  # 手柄大小 8x8
+            handle.setRect(-4, -4, 8, 8)  # 以手柄中心為原點，避免縮放時偏移
             handle.setBrush(QColor("#ffffff"))
             handle.setPen(QPen(QColor("#2680eb"), 1.4))
             handle.setZValue(100)
@@ -121,33 +127,30 @@ class SliceRect(QGraphicsRectItem):
             "left": QPointF(r.left(), cy)
         }
         for key, handle in self.handles.items():
-            handle.setPos(positions[key] - QPointF(4, 4))  # 平移使手柄置中
+            handle.setPos(positions[key])  # 手柄矩形已以中心為原點
+
+    def _set_handles_visible(self, visible):
+        fixed_mode = None
+        if self.scene() and self.scene().views():
+            fixed_mode = getattr(self.scene().views()[0].parent(), "fixedSliceSize", None)
+        show = bool(visible) and fixed_mode is None
+        for handle in self.handles.values():
+            try:
+                handle.setVisible(show)
+            except RuntimeError:
+                pass
+        if show:
+            self.updateHandles()
+        elif SliceRect.lastSelected == self:
+            SliceRect.lastSelected = None
 
     def setSelected(self, selected):
         super().setSelected(selected)
-        fixedMode = getattr(self.scene().views()[0].parent(), "fixedSliceSize", None) if self.scene() and self.scene().views() else None
         if selected:
             if SliceRect.lastSelected and SliceRect.lastSelected != self:
-                for handle in SliceRect.lastSelected.handles.values():
-                    try:
-                        handle.hide()
-                    except RuntimeError:
-                        pass
+                SliceRect.lastSelected._set_handles_visible(False)
             SliceRect.lastSelected = self
-            for handle in self.handles.values():
-                try:
-                    handle.setVisible(fixedMode is None)
-                except RuntimeError:
-                    pass
-            self.updateHandles()
-        else:
-            for handle in self.handles.values():
-                try:
-                    handle.hide()
-                except RuntimeError:
-                    pass
-            if SliceRect.lastSelected == self:
-                SliceRect.lastSelected = None
+        self._set_handles_visible(selected)
 
     def mousePressEvent(self, event):
         self.setSelected(True)
@@ -317,16 +320,10 @@ class SliceRect(QGraphicsRectItem):
                     view.parent().updateSliceList()
 
     def itemChange(self, change, value):
-        if change == QGraphicsItem.ItemSelectedChange and self.scene():
-            views = self.scene().views()
-            main = views[0].parent() if views else None
-            if value and main is not None and getattr(main, "fixedSliceSize", None) is None:
-                if len([item for item in self.scene().selectedItems() if isinstance(item, SliceRect)]) == 1:
-                    pass
-                else:
-                    pass
-            else:
-                pass
+        # Also runs when selection is cleared by the scene rather than through
+        # SliceRect.setSelected(), ensuring stale handles never remain visible.
+        if change == QGraphicsItem.ItemSelectedHasChanged:
+            self._set_handles_visible(bool(value))
         return super().itemChange(change, value)
 
 
@@ -343,6 +340,14 @@ class SliceView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
         self._dropActive = False
+        self._sideMoveActive = False
+        self._sideMoveStart = QPointF()
+        self._sideMoveRects = {}
+        self._handleResizeActive = False
+        self._resizeHandle = None
+        self._resizeItem = None
+        self._resizeStartScene = QPointF()
+        self._resizeInitialRect = QRectF()
         # 允許接收鍵盤焦點，確保方向鍵等事件能持續被接收
         self.setFocusPolicy(Qt.StrongFocus)
         self.image_item = None
@@ -408,10 +413,134 @@ class SliceView(QGraphicsView):
         self.scene().setSceneRect(QRectF(pixmap.rect()))
         self.image_item = self.scene().addPixmap(pixmap)
         
+    def _slice_at(self, view_pos):
+        item = self.scene().itemAt(self.mapToScene(view_pos), self.transform())
+        while item is not None and not isinstance(item, SliceRect):
+            item = item.parentItem()
+        return item
+
+    def _handle_at(self, view_pos):
+        item = self.scene().itemAt(self.mapToScene(view_pos), self.transform())
+        return item if isinstance(item, SliceRect.ResizeHandle) else None
+
+    def _begin_handle_resize(self, event):
+        handle = self._handle_at(event.pos())
+        if handle is None:
+            return False
+        self._handleResizeActive = True
+        self._resizeHandle = handle
+        self._resizeItem = handle.parentSlice
+        self._resizeStartScene = self.mapToScene(event.pos())
+        self._resizeInitialRect = QRectF(self._resizeItem.rect())
+        self._resizeItem.setSelected(True)
+        self.setCursor(handle.cursor())
+        return True
+
+    def _update_handle_resize(self, event):
+        if not self._handleResizeActive or self._resizeItem is None:
+            return
+        delta = self.mapToScene(event.pos()) - self._resizeStartScene
+        r = QRectF(self._resizeInitialRect)
+        key = self._resizeHandle.posKey
+        if key == "top_left":
+            r.setTopLeft(r.topLeft() + delta)
+        elif key == "top":
+            r.setTop(r.top() + delta.y())
+        elif key == "top_right":
+            r.setTopRight(r.topRight() + delta)
+        elif key == "right":
+            r.setRight(r.right() + delta.x())
+        elif key == "bottom_right":
+            r.setBottomRight(r.bottomRight() + delta)
+        elif key == "bottom":
+            r.setBottom(r.bottom() + delta.y())
+        elif key == "bottom_left":
+            r.setBottomLeft(r.bottomLeft() + delta)
+        elif key == "left":
+            r.setLeft(r.left() + delta.x())
+        if r.width() < 5 or r.height() < 5:
+            return
+        self._resizeItem.setRect(r)
+        self._resizeItem.updateHandles()
+        self.scene().update()
+
+    def _finish_handle_resize(self):
+        if not self._handleResizeActive:
+            return
+        self._handleResizeActive = False
+        self._resizeHandle = None
+        self._resizeItem = None
+        self.setCursor(Qt.ArrowCursor)
+        main = self.mainWindow
+        if hasattr(main, "updateSliceList"):
+            main.updateSliceList()
+        if hasattr(main, "update_preview_panel"):
+            main.update_preview_panel()
+        if hasattr(main, "markProjectEdited"):
+            main.markProjectEdited()
+
+    def _select_slice_for_side_button(self, view_pos, additive=False):
+        slice_item = self._slice_at(view_pos)
+        if slice_item is None:
+            if not additive:
+                self.scene().clearSelection()
+            self.setFocus()
+            return
+        if additive:
+            slice_item.setSelected(not slice_item.isSelected())
+        else:
+            self.scene().clearSelection()
+            slice_item.setSelected(True)
+        self.setFocus()
+
+    def _start_side_move(self, event):
+        slices = [item for item in self.scene().selectedItems() if isinstance(item, SliceRect)]
+        if not slices:
+            slice_item = self._slice_at(event.pos())
+            if slice_item is None:
+                return False
+            self.scene().clearSelection()
+            slice_item.setSelected(True)
+            slices = [slice_item]
+        self._sideMoveActive = True
+        self._sideMoveStart = self.mapToScene(event.pos())
+        self._sideMoveRects = {item: QRectF(item.rect()) for item in slices}
+        self.setCursor(Qt.ClosedHandCursor)
+        return True
+
+    def _finish_side_move(self):
+        self._sideMoveActive = False
+        self._sideMoveRects = {}
+        self.setCursor(Qt.ArrowCursor)
+        main = self.mainWindow
+        if hasattr(main, "updateSliceList"):
+            main.updateSliceList()
+        if hasattr(main, "update_preview_panel"):
+            main.update_preview_panel()
+        if hasattr(main, "markProjectEdited"):
+            main.markProjectEdited()
+        if hasattr(main, "statusBar"):
+            main.statusBar().showMessage(tr("切片移動完成"))
+
     def mousePressEvent(self, event):
         # 若尚未載入圖片，則不允許任何切片創建／繪製行為
         if self.image_item is None:
             super().mousePressEvent(event)
+            return
+        if event.button() in (Qt.LeftButton, Qt.BackButton, Qt.ForwardButton):
+            if self._begin_handle_resize(event):
+                event.accept()
+                return
+        if event.button() == Qt.BackButton:
+            if not (self.mainWindow.croppingMode or self.mainWindow.straightenPreviewActive):
+                additive = bool(event.modifiers() & (Qt.ControlModifier | Qt.ShiftModifier))
+                self._select_slice_for_side_button(event.pos(), additive)
+            event.accept()
+            return
+        if event.button() == Qt.ForwardButton:
+            if not (self.mainWindow.croppingMode or self.mainWindow.straightenPreviewActive):
+                self._start_side_move(event)
+            event.accept()
             return
         # 空格拖拽：開始 panning（攔截所有其它互動）
         if self.panning and event.button() == Qt.LeftButton:
@@ -497,6 +626,18 @@ class SliceView(QGraphicsView):
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if self._handleResizeActive:
+            self._update_handle_resize(event)
+            event.accept()
+            return
+        if self._sideMoveActive and (event.buttons() & Qt.ForwardButton):
+            delta = self.mapToScene(event.pos()) - self._sideMoveStart
+            for item, initial_rect in self._sideMoveRects.items():
+                item.setRect(initial_rect.translated(delta))
+                item.updateHandles()
+            self.scene().update()
+            event.accept()
+            return
         # 空格拖拽：滾動視圖
         if self.panning and hasattr(self, '_pan_start'):
             delta = event.pos() - self._pan_start
@@ -542,6 +683,14 @@ class SliceView(QGraphicsView):
         # 若尚未載入圖片，則不允許任何切片創建／繪製行為
         if self.image_item is None:
             super().mouseReleaseEvent(event)
+            return
+        if self._handleResizeActive:
+            self._finish_handle_resize()
+            event.accept()
+            return
+        if self._sideMoveActive and event.button() == Qt.ForwardButton:
+            self._finish_side_move()
+            event.accept()
             return
         # 空格拖拽結束
         if self.panning and event.button() == Qt.LeftButton and hasattr(self, '_pan_start'):

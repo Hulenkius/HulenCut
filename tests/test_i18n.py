@@ -59,6 +59,15 @@ class TranslationTests(unittest.TestCase):
         self.assertIn("Credits:", translated)
         self.assertIn("DeepSeek Harness", translated)
 
+    def test_operation_guide_exists_in_all_languages(self):
+        i18n.set_language("en_US", persist=False)
+        guide = i18n.translate("operation_guide_body")
+        self.assertIn("Operation Guide", guide)
+        self.assertIn("Mouse button 4", guide)
+        self.assertIn("resize", guide.lower())
+        i18n.set_language("zh_CN", persist=False)
+        self.assertIn("操作指南", i18n.translate("operation_guide_body"))
+
     def test_format_template(self):
         i18n.set_language("en_US", persist=False)
         message = i18n.translate("切片 {0} 移動完成").format(3)
