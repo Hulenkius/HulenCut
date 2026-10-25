@@ -7,7 +7,7 @@
 <p align="center">印刷品图像切片、表格识别、批量处理与导出的桌面工具</p>
 
 <p align="center">
-  <strong>v0.8.2</strong> · Windows 10/11 · 繁體中文 / 简体中文 / English
+  <strong>v0.8.2</strong> · 繁體中文 / 简体中文 / English
 </p>
 
 ## 简介
@@ -32,7 +32,7 @@ HulenCut 用于将整页书影扫描件或表格图片切分为多个独立图�
 
 ## 快速开始
 
-### 运行发布版
+### 运行 Windows 发布版
 
 1. [下载发布包](https://github.com/Hulenkius/HulenCut/releases)
 2. 双击 `HulenCut.exe`
@@ -40,7 +40,7 @@ HulenCut 用于将整页书影扫描件或表格图片切分为多个独立图�
 
 ### 从源码运行
 
-需要 Windows 10/11、Python 3.10+。
+需要 Python 3.10+。
 
 ```powershell
 python -m pip install -r requirements.txt
