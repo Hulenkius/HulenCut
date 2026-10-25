@@ -764,3 +764,59 @@ class JsonImportPresetDialog(QDialog):
             "logic": logic,
             "condition2": {"dimension": dim2, "operator": op2, "value": val2}
         }
+
+
+class TextRecognitionSliceDialog(QDialog):
+    """Choose horizontal or vertical layout for OCR character slicing."""
+
+    last_params = {"orientation": "horizontal"}
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("依文字識別切片"))
+        layout = QFormLayout(self)
+
+        description = QLabel(
+            tr("・使用文字識別模型偵測文字，並將每一個字元分割為獨立切片。"),
+            self,
+        )
+        description.setObjectName("hintLabel")
+        description.setWordWrap(True)
+        layout.addRow(description)
+
+        self.orientationGroup = QButtonGroup(self)
+        self.radioHorizontal = QRadioButton(tr("橫排"), self)
+        self.radioVertical = QRadioButton(tr("豎排"), self)
+        if TextRecognitionSliceDialog.last_params.get("orientation") == "vertical":
+            self.radioVertical.setChecked(True)
+        else:
+            self.radioHorizontal.setChecked(True)
+        self.orientationGroup.addButton(self.radioHorizontal)
+        self.orientationGroup.addButton(self.radioVertical)
+
+        orientationLayout = QHBoxLayout()
+        orientationLayout.addWidget(self.radioHorizontal)
+        orientationLayout.addWidget(self.radioVertical)
+        layout.addRow(tr("文字方向："), orientationLayout)
+
+        note = QLabel(
+            tr("橫排依上至下、左至右排序；豎排依右至左、上至下排序。"),
+            self,
+        )
+        note.setObjectName("hintLabel")
+        note.setWordWrap(True)
+        layout.addRow(note)
+
+        self.buttonBox = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self
+        )
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        layout.addRow(self.buttonBox)
+
+    def getValues(self):
+        orientation = (
+            "horizontal" if self.radioHorizontal.isChecked() else "vertical"
+        )
+        TextRecognitionSliceDialog.last_params = {"orientation": orientation}
+        return {"orientation": orientation}

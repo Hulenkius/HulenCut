@@ -35,7 +35,7 @@ class MainWindowSmokeTests(unittest.TestCase):
         window = MainWindow()
         self.assertIn("HulenCut", window.windowTitle())
         window.changeLanguage("en_US")
-        self.assertEqual(window.windowTitle(), "HulenCut v0.8.2")
+        self.assertEqual(window.windowTitle(), "HulenCut v0.8.3")
         window.changeLanguage("zh_TW")
         self.assertIn("囫圇切", window.windowTitle())
         window.close()
@@ -45,7 +45,7 @@ class MainWindowSmokeTests(unittest.TestCase):
         i18n.set_language("zh_TW", persist=False)
         window = MainWindow()
         window.changeLanguage("zh_CN")
-        self.assertEqual(window.windowTitle(), "囫囵切 HulenCut v0.8.2")
+        self.assertEqual(window.windowTitle(), "囫囵切 HulenCut v0.8.3")
         window.close()
         window.deleteLater()
 
@@ -152,6 +152,24 @@ class MainWindowSmokeTests(unittest.TestCase):
         import cutter
 
         self.assertIs(cutter.MainWindow, MainWindow)
+
+    def test_version_and_gpl_license_metadata(self):
+        import cutter_app
+
+        self.assertEqual(cutter_app.__version__, "0.8.3")
+        self.assertEqual(cutter_app.__license__, "GPL-2.0")
+        license_path = Path(__file__).resolve().parents[1] / "LICENSE"
+        self.assertTrue(license_path.is_file())
+        license_text = license_path.read_text(encoding="utf-8")
+        self.assertIn("GNU GENERAL PUBLIC LICENSE", license_text)
+        self.assertIn("Version 2, June 1991", license_text)
+
+        notices_path = Path(__file__).resolve().parents[1] / "THIRD_PARTY_NOTICES.md"
+        self.assertTrue(notices_path.is_file())
+        notices = notices_path.read_text(encoding="utf-8")
+        self.assertIn("DayBreak-u/chineseocr_lite", notices)
+        self.assertIn("fanqie03/char-detection", notices)
+        self.assertGreaterEqual(notices.count("GPL-2.0"), 2)
 
 
 if __name__ == "__main__":

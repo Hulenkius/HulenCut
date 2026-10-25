@@ -7,7 +7,7 @@
 <p align="center">印刷品图像切片、表格识别、批量处理与导出的桌面工具</p>
 
 <p align="center">
-  <strong>v0.8.2</strong> · 繁體中文 / 简体中文 / English
+  <strong>v0.8.3</strong> · 繁體中文 / 简体中文 / English
 </p>
 
 ## 简介
@@ -18,6 +18,8 @@ HulenCut 用于将整页书影扫描件或表格图片切分为多个独立图�
 
 - 导入图片、文件夹、`.cutter` 工程以及看典古籍 JSON
 - 手动拖拽创建切片，或自动识别文字区域与表格
+- 依文字识别切片：使用 DBNet + CRNN 模型，可选横排/竖排并逐字分割
+- 在切片列表或画布右键「识别文字」，可用识别结果批量命名选中的切片
 - 移动、缩放、筛选、合并、定幅、批量重命名切片
 - 裁剪图像、校正倾斜
 - 切片搜索、对齐、分布、预览与快速跳转
@@ -118,3 +120,12 @@ pyinstaller cutter.spec --noconfirm
 Github Copilot、DeepSeek Harness、Basic、南池子、Kushim Jiang
 
 本项目为 2025 年 1 月开始为[仲春仿宋](https://github.com/Hulenkius/sotyr)项目开发的配套软件，最初由 Github Copilot 编写，后由 DeepSeek Harness 规范化项目结构并构建现代化界面。于 2026 年 10 月 19 日开放源代码。
+
+## 授权
+
+本项目以 [GNU General Public License v2.0（GPL-2.0）](LICENSE) 授权发布。
+
+OCR／文字识别功能使用或改编自以下开源项目：
+
+- [DayBreak-u/chineseocr_lite](https://github.com/DayBreak-u/chineseocr_lite) (GPL-2.0)
+- [fanqie03/char-detection](https://github.com/fanqie03/char-detection)

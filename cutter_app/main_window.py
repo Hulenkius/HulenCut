@@ -2,6 +2,7 @@
 import json
 import math
 import os
+import re
 import shutil
 import urllib.request
 from pathlib import Path
@@ -11,6 +12,7 @@ from cv2 import (
     BORDER_CONSTANT,
     CHAIN_APPROX_SIMPLE,
     COLOR_BGRA2GRAY,
+    COLOR_RGBA2BGR,
     INTER_LINEAR,
     RETR_EXTERNAL,
     THRESH_BINARY,
@@ -38,6 +40,7 @@ from .dialogs import (
     ScaleProjectDialog,
     ScaleSlicesDialog,
     TableDetectDialog,
+    TextRecognitionSliceDialog,
 )
 from .graphics import SliceListWidget, SliceRect, SliceView
 from .icons import make_icon
@@ -51,6 +54,11 @@ from .panels import (
     StraightenWidget,
 )
 from .scripting import ScriptRecorder
+from .text_recognition import (
+    TextRecognitionUnavailableError,
+    recognize_characters,
+    recognize_text,
+)
 from .theme import AVAILABLE_THEMES, theme_manager
 from .utils import resource_path
 
@@ -65,8 +73,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         QApplication.setApplicationName("HulenCut")
-        self.setWindowTitle(tr("囫圇切 HulenCut v0.8.2"))
-        self.currentVersion = "v0.8.2"  # 當前版本號
+        self.currentVersion = "v0.8.3"
+        self.setWindowTitle(tr("囫圇切 HulenCut v0.8.3"))
         self.setWindowIcon(QIcon(resource_path("hulencutter.ico")))
         self.setAcceptDrops(True)
         self.resize(1280, 800)
@@ -787,10 +795,18 @@ class MainWindow(QMainWindow):
         
         # 動作下拉選單
         actionMenu = QMenu(tr("動作"), self)
-        actAutoRecognize = QAction(tr("自動識別切片"), self)
+        actAutoRecognize = QAction(tr("依圖形識別切片"), self)
         actAutoRecognize.triggered.connect(self.autoRecognizeWordSlices)
         actAutoRecognize.setShortcut("Ctrl+R")
         actionMenu.addAction(actAutoRecognize)
+        actRecognizeChars = QAction(tr("依文字識別切片"), self)
+        actRecognizeChars.triggered.connect(self.autoRecognizeCharacterSlices)
+        # Qt maps Ctrl to Command on macOS, so this is Cmd+W there while
+        # remaining Ctrl+W on Windows and Linux.  Keep it window-local so the
+        # shortcut does not leak into other applications.
+        actRecognizeChars.setShortcut("Ctrl+W")
+        actRecognizeChars.setShortcutContext(Qt.WindowShortcut)
+        actionMenu.addAction(actRecognizeChars)
         actDetectTable = QAction(tr("自動識別表格"), self)
         actDetectTable.triggered.connect(self.autoDetectTable)
         actionMenu.addAction(actDetectTable)
@@ -1082,6 +1098,7 @@ class MainWindow(QMainWindow):
         self._set_action_icon(actSaveProject, "save")
         self._set_action_icon(actExportSlices, "export")
         self._set_action_icon(actAutoRecognize, "wand")
+        self._set_action_icon(actRecognizeChars, "ocr-text")
         self._set_action_icon(actDetectTable, "table")
         self._set_action_icon(actDivide, "grid")
         self._set_action_icon(actMove, "move")
@@ -1106,6 +1123,7 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         for action in (
             actAutoRecognize,
+            actRecognizeChars,
             actDetectTable,
             actDivide,
             actMove,
@@ -1600,7 +1618,7 @@ class MainWindow(QMainWindow):
             self.recorder.log_action("exportSlices")
 
     def showAbout(self):
-        QMessageBox.about(self, tr("關於"), tr("囫圇切 HulenCut v0.8.2\n\nhttps://vistudium.top/gouken/\n\n鳴謝：\nGithub Copilot\nDeepSeek Harness\nBasic 低手\n南池子\nKushim Jiang\n\n活字攷古 @hulenkius 絶讚狗啃中"))
+        QMessageBox.about(self, tr("關於"), tr("囫圇切 HulenCut v0.8.3\n\nhttps://github.com/Hulenkius/HulenCut\n\n授權：GNU General Public License v2.0（GPL-2.0）\nOCR 開源元件：chineseocr_lite、char-detection（GPL-2.0）\n\n鳴謝：\nGithub Copilot\nDeepSeek Harness\nBasic 低手\n南池子\nKushim Jiang\n\n活字攷古 @hulenkius 絶讚狗啃中"))
         
     def showManual(self):
         manual_text = tr("operation_guide_body")
@@ -2198,6 +2216,166 @@ class MainWindow(QMainWindow):
         QApplication.beep()
         self.statusBar().showMessage(tr('自動識別完成，新增 {0} 切片').format(len(rects)))
         self.markProjectEdited()
+
+    @staticmethod
+    def _safe_slice_name(text: str) -> str:
+        """Make an OCR character safe to use as an exported slice name."""
+        name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(text)).strip()
+        return name[:32]
+
+    def autoRecognizeCharacterSlices(self):
+        """Detect text with the bundled DBNet/CRNN models and split each char."""
+        if not self.sliceView.image_item:
+            self.statusBar().showMessage(tr("請先導入圖片"))
+            return
+
+        dialog = TextRecognitionSliceDialog(self)
+        if dialog.exec_() != QDialog.Accepted:
+            return
+        orientation = dialog.getValues()["orientation"]
+        self.recorder.log_action("recognizeTextSlices", orientation)
+
+        qimg = self.sliceView.image_item.pixmap().toImage().convertToFormat(
+            QImage.Format_RGBA8888
+        )
+        width, height = qimg.width(), qimg.height()
+        ptr = qimg.bits()
+        ptr.setsize(qimg.byteCount())
+        image_array = np.array(ptr).reshape(height, width, 4)
+        image_bgr = cvtColor(image_array, COLOR_RGBA2BGR)
+
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.processEvents()
+        error_kind = None
+        error = None
+        try:
+            characters = recognize_characters(
+                image_bgr, orientation=orientation
+            )
+        except TextRecognitionUnavailableError as exc:
+            error_kind = "unavailable"
+            error = exc
+        except Exception as exc:
+            error_kind = "failed"
+            error = exc
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if error_kind == "unavailable":
+            QMessageBox.warning(self, tr("文字識別不可用"), str(error))
+            return
+        if error_kind == "failed":
+            QMessageBox.critical(self, tr("文字識別失敗"), str(error))
+            return
+
+        if not characters:
+            QMessageBox.information(
+                self,
+                tr("依文字識別切片"),
+                tr("未識別到可分割的文字。"),
+            )
+            return
+
+        scene = self.sliceView.scene()
+        existing_numbers = [
+            item.number for item in scene.items() if isinstance(item, SliceRect)
+        ]
+        next_number = max(existing_numbers, default=0) + 1
+        for character in characters:
+            x, y, w, h = character.bounds()
+            if w <= 0 or h <= 0:
+                continue
+            new_slice = SliceRect(
+                QRectF(x, y, w, h),
+                number=next_number,
+                name=self._safe_slice_name(character.char),
+            )
+            next_number += 1
+            scene.addItem(new_slice)
+
+        self.updateSliceList()
+        QApplication.beep()
+        self.statusBar().showMessage(
+            tr("文字識別切片完成，新增 {0} 個字元切片").format(len(characters))
+        )
+        self.markProjectEdited()
+
+    def recognizeSliceText(self, slice_items):
+        """Recognise text in the given slices and use it as each slice name."""
+        if not self.sliceView.image_item:
+            self.statusBar().showMessage(tr("請先導入圖片"))
+            return
+
+        targets = []
+        seen = set()
+        for slice_item in slice_items:
+            if not isinstance(slice_item, SliceRect):
+                continue
+            item_id = id(slice_item)
+            if item_id in seen:
+                continue
+            seen.add(item_id)
+            if slice_item.scene() is not self.sliceView.scene():
+                continue
+            targets.append(slice_item)
+        if not targets:
+            return
+
+        self.recorder.log_action("recognizeSliceText", len(targets))
+        original = self.sliceView.image_item.pixmap().toImage()
+        named_count = 0
+        failed_count = 0
+        error = None
+
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            for index, slice_item in enumerate(targets, start=1):
+                self.statusBar().showMessage(
+                    tr("正在識別文字：{0}/{1}").format(index, len(targets))
+                )
+                QApplication.processEvents()
+
+                rect = slice_item.rect().toRect().intersected(original.rect())
+                if rect.width() < 1 or rect.height() < 1:
+                    failed_count += 1
+                    continue
+                crop = original.copy(rect).convertToFormat(QImage.Format_RGBA8888)
+                width, height = crop.width(), crop.height()
+                ptr = crop.bits()
+                ptr.setsize(crop.byteCount())
+                crop_array = np.array(ptr).reshape(height, width, 4)
+                crop_bgr = cvtColor(crop_array, COLOR_RGBA2BGR)
+                try:
+                    recognized = recognize_text(crop_bgr).strip()
+                except TextRecognitionUnavailableError as exc:
+                    error = exc
+                    break
+                except Exception:
+                    failed_count += 1
+                    continue
+
+                safe_name = self._safe_slice_name(recognized)
+                if safe_name:
+                    slice_item.name = safe_name
+                    named_count += 1
+                else:
+                    failed_count += 1
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if error is not None:
+            QMessageBox.warning(self, tr("文字識別不可用"), str(error))
+            return
+
+        if named_count:
+            self.updateSliceList()
+            self.markProjectEdited()
+            QApplication.beep()
+
+        message = tr("文字識別完成，已命名 {0} 個切片").format(named_count)
+        if failed_count:
+            message += tr("，{0} 個未識別到文字").format(failed_count)
+        self.statusBar().showMessage(message)
 
     # 自動識別表格功能
     def autoDetectTable(self):
