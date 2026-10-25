@@ -16,7 +16,6 @@ from cutter_app.dialogs import (
     ScaleProjectDialog,
     ScaleSlicesDialog,
     TableDetectDialog,
-    TextRecognitionSliceDialog,
 )
 from cutter_app.graphics import SliceListWidget, SliceRect, SliceView
 from cutter_app.main_window import MainWindow
@@ -53,7 +52,6 @@ __all__ = [
     "SliceView",
     "StraightenWidget",
     "TableDetectDialog",
-    "TextRecognitionSliceDialog",
     "main",
     "resource_path",
 ]

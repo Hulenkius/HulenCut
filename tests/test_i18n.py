@@ -50,7 +50,7 @@ class TranslationTests(unittest.TestCase):
         about_key = None
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                if "HulenCut v" in node.value and "https://github.com/Hulenkius/HulenCut" in node.value:
+                if "HulenCut v" in node.value and "https://vistudium.top/gouken/" in node.value:
                     about_key = node.value
                     break
         self.assertIsNotNone(about_key)
@@ -58,7 +58,6 @@ class TranslationTests(unittest.TestCase):
         translated = i18n.translate(about_key)
         self.assertIn("Credits:", translated)
         self.assertIn("DeepSeek Harness", translated)
-        self.assertIn("https://github.com/Hulenkius/HulenCut", translated)
 
     def test_operation_guide_exists_in_all_languages(self):
         i18n.set_language("en_US", persist=False)

@@ -286,7 +286,6 @@ class SliceRect(QGraphicsRectItem):
     def contextMenuEvent(self, event):
         menu = QMenu()
         renameAct = menu.addAction(tr("重命名切片"))
-        recognizeAct = menu.addAction(tr("識別文字"))
         deleteAct = menu.addAction(tr("刪除切片"))
         action = menu.exec_(event.screenPos())
         if action == renameAct:
@@ -304,18 +303,6 @@ class SliceRect(QGraphicsRectItem):
                         main.updateSliceList()
                     if hasattr(main, "markProjectEdited"):
                         main.markProjectEdited()
-            event.accept()
-        elif action == recognizeAct:
-            if self.scene() and self.scene().views():
-                main = self.scene().views()[0].parent()
-                selected = [
-                    item
-                    for item in self.scene().selectedItems()
-                    if isinstance(item, SliceRect)
-                ]
-                targets = selected if self in selected else [self]
-                if hasattr(main, "recognizeSliceText"):
-                    main.recognizeSliceText(targets)
             event.accept()
         elif action == deleteAct:
             if self.scene() and self.scene().views():
@@ -1209,9 +1196,6 @@ class SliceListWidget(QListWidget):
         selected_items = self.selectedItems()
         if len(selected_items) == 1:
             renameAction = menu.addAction(tr("重命名切片"))
-        recognizeAction = (
-            menu.addAction(tr("識別文字")) if selected_items else None
-        )
         clearNameAction = menu.addAction(tr("刪除名稱"))
         deleteAction = menu.addAction(tr("刪除切片"))
         action = menu.exec_(self.mapToGlobal(pos))
@@ -1232,14 +1216,6 @@ class SliceListWidget(QListWidget):
                             self.window().updateSliceList()
                         if hasattr(self.window(), "markProjectEdited"):
                             self.window().markProjectEdited()
-        elif recognizeAction is not None and action == recognizeAction:
-            slices = [
-                item.data(Qt.UserRole)
-                for item in selected_items
-                if item.data(Qt.UserRole) is not None
-            ]
-            if self.window() and hasattr(self.window(), "recognizeSliceText"):
-                self.window().recognizeSliceText(slices)
         elif action == clearNameAction:
             for item in selected_items:
                 slice_item = item.data(Qt.UserRole)

@@ -1,38 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all
-
 ROOT = Path(SPECPATH)
-
-# OCR is optional at runtime, so collect its packages explicitly.  This keeps
-# the native ONNX Runtime extension and the Shapely/pyclipper backends in the
-# frozen build even though they are imported lazily by the UI.
-ocr_datas = []
-ocr_binaries = []
-ocr_hiddenimports = []
-for _package in ("onnxruntime", "PIL", "shapely", "pyclipper"):
-    try:
-        _datas, _binaries, _hiddenimports = collect_all(_package)
-    except Exception:
-        continue
-    ocr_datas += _datas
-    ocr_binaries += _binaries
-    ocr_hiddenimports += _hiddenimports
 
 a = Analysis(
     [str(ROOT / "cutter.py")],
     pathex=[str(ROOT)],
-    binaries=ocr_binaries,
+    binaries=[],
     datas=[
         (str(ROOT / "hulencutter.ico"), "."),
-        (str(ROOT / "LICENSE"), "."),
-        (str(ROOT / "THIRD_PARTY_NOTICES.md"), "."),
         (str(ROOT / "cutter_app" / "locales"), "cutter_app/locales"),
         (str(ROOT / "cutter_app" / "assets"), "cutter_app/assets"),
-        (str(ROOT / "cutter_app" / "models"), "cutter_app/models"),
-    ] + ocr_datas,
-    hiddenimports=ocr_hiddenimports,
+    ],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

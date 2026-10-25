@@ -102,15 +102,11 @@ def _pixmap(name: str, color: str, accent: str, size: int) -> QPixmap:
         painter.setPen(accent_pen)
         painter.drawRect(QRectF(3.0, 4.0, 6.0, 5.0))
     elif name == "grid":
-        # Four independent slice outlines crossed by a blue dividing axis.
-        for x in (2.8, 13.4):
-            for y in (2.8, 13.4):
-                painter.drawRoundedRect(QRectF(x, y, 7.8, 7.8), 1.1, 1.1)
-        divide_pen = QPen(QColor(accent), 2.4)
-        divide_pen.setCapStyle(Qt.RoundCap)
-        painter.setPen(divide_pen)
-        painter.drawLine(QPointF(12.0, 1.2), QPointF(12.0, 22.8))
-        painter.drawLine(QPointF(1.2, 12.0), QPointF(22.8, 12.0))
+        for x in (3.0, 13.0):
+            for y in (3.0, 13.0):
+                painter.drawRect(QRectF(x, y, 8.0, 8.0))
+        painter.setPen(accent_pen)
+        painter.drawRect(QRectF(13.0, 13.0, 8.0, 8.0))
     elif name == "move":
         painter.drawLine(QPointF(12.0, 3.0), QPointF(12.0, 21.0))
         painter.drawLine(QPointF(3.0, 12.0), QPointF(21.0, 12.0))
@@ -166,14 +162,6 @@ def _pixmap(name: str, color: str, accent: str, size: int) -> QPixmap:
         painter.drawRect(QRectF(4.0, 4.0, 11.0, 11.0))
         painter.setPen(accent_pen)
         painter.drawRect(QRectF(9.0, 9.0, 11.0, 11.0))
-    elif name == "ocr-text":
-        painter.drawRoundedRect(QRectF(2.5, 4.0, 19.0, 16.0), 2.0, 2.0)
-        painter.drawLine(QPointF(6.0, 8.5), QPointF(13.0, 8.5))
-        painter.drawLine(QPointF(6.0, 12.0), QPointF(17.0, 12.0))
-        painter.drawLine(QPointF(6.0, 15.5), QPointF(11.0, 15.5))
-        painter.setPen(accent_pen)
-        painter.drawEllipse(QPointF(16.0, 15.5), 2.3, 2.3)
-        painter.drawLine(QPointF(17.7, 17.2), QPointF(20.5, 20.0))
     elif name == "text":
         painter.drawLine(QPointF(5.0, 18.0), QPointF(12.0, 5.0))
         painter.drawLine(QPointF(12.0, 5.0), QPointF(19.0, 18.0))
